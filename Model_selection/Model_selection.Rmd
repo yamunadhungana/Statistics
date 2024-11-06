@@ -1,0 +1,433 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Model Selection"
+date: 2023-10-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+- Machine Learning
+summary: Statistics series
+---
+
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+
+
+There are two main objectives in inference and learning from data. One is for scientific discovery, understanding of the underlying data-generating mechanism, and interpretation of the nature of the data. Another objective of learning from data is for predicting future or unseen observations. In the second objective, the data scientist does not necessarily concern an accurate probabilistic description of the data. Of course, one may also be interested in both directions.
+
+In line with the two different objectives, model selection can also have two directions: model selection for inference and model selection for prediction. The first direction is to identify the best model for the data, which will preferably provide a reliable characterization of the sources of uncertainty for scientific interpretation. For this goal, it is significantly important that the selected model is not too sensitive to the sample size. Accordingly, an appropriate notion for evaluating model selection is the selection consistency, meaning that the most robust candidate will be consistently selected given sufficiently many data samples.
+
+Here, we will see some examples of model selection in this exercise.
+
+Suppose we estimate the regression coefficients in a linear regression
+model by minimizing
+
+$${\sum_{i=1}^n ( y_i - \beta_0 - \sum_{j=1}^p \beta_j x_{ij} )^2 + \ \sum_{j=1}^{p}\beta_j^2}$$
+
+
+
+for a particular value of $\lambda$. 
+
+For parts (a) through (e), indicate which
+of i. through v. is correct. Justify your answer.
+
+(a) As we increase $\lambda$ from 0, the training  RSS will:
+i. Increase initially, and then eventually start decreasing in an
+inverted U shape.
+ii. Decrease initially, and then eventually start increasing in a
+U shape.
+iii. Steadily increase.
+iv. Steadily decrease.
+v. Remain constant.
+
+**Answer:**
+(iii) Steadily increase.
+
+As we increase $\lambda$, the training residual sum of squares (RSS) will increase steadily. The term with lambda is often called ‘Penalty’ since it increases RSS. Increasing lambda places a heavier constraint on the model, which causes more $\beta$ coeficients to be set to 0 (this is a ridge or $\ell_2$ penalty).
+
+(b) Repeat (a) for test RSS.
+
+**Answer:**
+(ii) Decrease initially, and then eventually start increasing in a
+U shape.
+
+Initially test RSS will decrease as spurious coefficients are forced to 0 and the model has less overfitting. However eventually necessary coefficients will be removed from the model, and the test RSS will again increase. This will make it a U shape.
+
+(c) Repeat (a) for variance.
+
+**Answer:**
+(iv) Steadily decrease
+
+This will cause the variance to decrease because more penalty will be placed on the model.
+
+(d) Repeat (a) for (squared) bias.
+
+**Answer:**
+(iii) Steadily increase
+
+As we increase the $\lambda$, the squared bias will increase because the model becomes less flexible.
+
+(e) Repeat (a) for the irreducible error.
+
+**Answer:**
+v. Remain constant.
+
+
+In this exercise, we will predict the number of applications received using the other variables in the College data set.
+
+(a) Split the data set into a training set and a test set.
+
+```{r,echo=FALSE,warning=FALSE}
+library(ggplot2)
+library(ISLR)
+data("College")
+clg=College
+
+cat("Partitioning 50/50")
+set.seed(702)
+trainindex=sample(1:nrow(clg),size=ceiling(nrow(clg)/2))
+
+ctrain=clg[trainindex,]
+ctest=clg[-trainindex,]
+
+dim(ctrain)
+dim(ctest)
+
+
+```
+
+Here we are doing the 50/50 partitioning of test and train datasets.
+
+
+(b) Fit a linear model using least squares on the training set, and
+report the test error obtained.
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+modelb=lm(Apps~., data=ctrain)
+predb=predict(modelb, newdata = ctest)
+
+#remotes::install_github("cran/DMwR")
+library(DMwR)
+MSEb=regr.eval(ctest$Apps,predb,stats = "mse")
+cat("Error: ")
+print(MSEb)
+
+```
+
+The test error was calculated to be `r MSEb`.
+
+
+(c) Fit a ridge regression model on the training set, with $\lambda$ chosen
+by cross-validation. Report the test error obtained.
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+library(glmnet)
+
+trainDM = model.matrix(Apps~., data=ctrain) ## Design Matrix
+testDM = model.matrix(Apps~., data=ctest)
+pow=seq(4,-4,length=200)
+grid = 10^pow
+set.seed(702)
+ridgeb = cv.glmnet(trainDM, ctrain[, which(names(ctrain)=="Apps")], 
+                   alpha=0,
+                   lambda=grid, thresh=1e-12)
+
+
+lambdab = ridgeb$lambda.min
+lambdab
+
+cat("Error")
+predc = predict(ridgeb, newx=testDM, s=lambdab)
+MSEc=regr.eval(ctest$Apps,predc,stats = "mse")
+print(MSEc) 
+
+```
+
+
+With 702 as seed, the $\lambda$ was found to be `r lambdab`  by cross validation. Using this, the ridge regression MSE was found to be `r MSEc`.
+
+
+(d) Fit a lasso model on the training set, with $\lambda$ chosen by cross- validation. Report the test error obtained, along with the number of non-zero coefficient estimates.
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+set.seed(702)
+lassod = cv.glmnet(trainDM,
+                   ctrain[, which(names(ctrain) == "Apps")],
+                   alpha = 1,
+                   lambda = grid,
+                   thresh = 1e-12)
+lambdad = lassod$lambda.min
+lambdad ##10.5956
+cat(" Error")
+predd = predict(lassod, newx = testDM, s = lambdad)
+MSEd = regr.eval(ctest$Apps, predd, stats = "mse")
+print(MSEd)
+
+print_glmnet_coefs = function(cvfit, s = "lambda.min") {
+  ind = which(coef(cvfit, s = s) != 0)
+  df = data.frame(feature = rownames(coef(cvfit, s = s))[ind],
+                  coeficient = coef(cvfit, s = s)[ind])
+  print(df)
+}
+cat("## gmlnet coefficients ")
+print_glmnet_coefs(lassod, lambdad)
+
+
+```
+
+Using lasso, $\lambda$ chosen by CV was found to be `r lambdad`. 
+Test MSE: `r MSEd`.
+
+
+
+(e) Fit a PCR model on the training set, with M chosen by cross- validation. Report the test error obtained, along with the value of M selected by cross-validation.
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+library(pls)
+set.seed(702)
+pcre = pcr(Apps ~ .,
+           data = ctrain,
+           scale = T,
+           validation = "CV")
+vplote = validationplot(pcre, val.type = "MSEP", xaxt = "none")
+axis(1, at = 0:17, labels = 0:17)
+abline(
+  h = c(1:30) / 3 * 1e6,
+  v = c(0:17),
+  col = "gray",
+  lty = 3
+)
+
+
+summary(pcre)
+cat("Test error")
+prede = predict(pcre, newdata = ctest, ncomp = 16)
+MSEe = regr.eval(ctest$Apps, prede, stats = "mse")
+print(MSEe)  
+```
+
+
+Here, principal component regression (PCR) was build. M=16 gives the minimum error. So M=16 was chosen. M=16 is also only slightly less than M=17. The test MSE was `r MSEe`. This is higher among all the errors we compared above.
+
+
+(f) Fit a PLS model on the training set, with M chosen by cross- validation. Report the test error obtained, along with the value of M selected by cross-validation.
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+set.seed(702)
+plsf = plsr(Apps ~ .,
+            data = ctrain,
+            scale = T,
+            validation = "CV")
+validationplot(plsf, val.type = "MSEP")
+summary(plsf)
+
+
+predf = predict(plsf, ctest, ncomp = 10)
+MSEf = regr.eval(ctest$Apps, predf, stats = "mse")
+print(MSEf) 
+
+
+```
+
+Partial least square regression (PLS) model was built. From the summary, we see that choosing M=10 yields the minimum error. So M=10 was chosen. The test MSE was `r MSEf`. This was slightly higher than lasso, but lower than ridge and pcr.
+
+
+(g) Comment on the results obtained. How accurately can we predict the number of college applications received? Is there much difference among the test errors resulting from these five approaches?
+
+
+```{r,echo=FALSE,warning=FALSE}
+
+method = c("LM", "Ridge", "Lasso", "PCR", "PLS")
+plot(
+  c(MSEb, MSEc, MSEd, MSEe, MSEf),
+  pch = 16,
+  col = 4,
+  cex = 2,
+  xaxt = "none",
+  xlab = "",
+  yaxt = "none",
+  ylab = "",
+  ylim = c(150000, 1750000)
+)
+title(main = "Plot showing test MSE comparision", line = 0.7)
+title(ylab = "MSE (in 10000)", line = 2.6)
+title(xlab = "Method", line = 2.4)
+axis(1, at = 1:5, labels = method)
+axis(
+  2,
+  at = c(27:30) * 5 * 1e4,
+  labels = c(27:30) * 5,
+  las = 2
+)
+abline(
+  v = c(1:5),
+  h = c(27:30) * 5 * 1e4,
+  lty = 3,
+  col = "gray"
+)
+
+
+cat("Comparative analysis of Errors")
+comparative = cbind(MSEb, MSEc, MSEd, MSEe, MSEf) / MSEb
+comparative
+
+# R-square and Standardization in Regression
+cat("Rsquare") # http://www.people.vcu.edu/~nhenry/Rsq.htm
+SSEs = cbind(MSEb, MSEc, MSEd, MSEe, MSEf) * nrow(ctest)
+TSS = sum((ctest$Apps - mean(ctest$Apps)) ^ 2)
+Rsqs = 1 - SSEs / TSS
+Rsqs
+
+barplot(Rsqs - min(Rsqs), col = "green", ylab = "Rsqares - min(Rsquares))")
+
+```
+
+
+The test MSEs is obtained by the five methods. We see there is not much difference in the errors. 
+
+Based on the error estimates it is difficult to predict which model performs best in terms of accuracy. So, instead of using MSE, R-square for the test data was calculated (http://www.people.vcu.edu/~nhenry/Rsq.htm), which gives us a sense of how well the models are explaining the variabilities. From the results above, we see that all models have value over 92%. The models are predicting with reasonably high accuracy. There is very minimal difference in the values with PCR being the smallest Rsquare. Except PCR, all models predict college applications with high accuracy.
+
+
+We will now try to predict per capita crime rate in the Boston dataset.
+
+(a) Try out some of the regression methods explored previously,
+such as best subset selection, the lasso, ridge regression, and
+PCR. Present and discuss results for the approaches that you
+consider.
+
+```{r,echo=FALSE,warning=FALSE}
+
+cat("Best subset")
+library(MASS)
+library(leaps)
+
+
+predict.regsubsets = function(object, newdata, id, ...) {
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object, id = id)
+  mat[, names(coefi)] %*% coefi
+}
+
+
+k = 10
+p = dim(Boston)[2] - 1
+set.seed(702)
+folds = sample(rep(1:k, length = nrow(Boston)))
+cv.errors = matrix(NA, k, p)
+for (i in 1:k) {
+  best.fit = regsubsets(crim ~ ., data = Boston[folds != i,], nvmax = p)
+  for (j in 1:p) {
+    pred = predict(best.fit, Boston[folds == i,], id = j)
+    cv.errors[i, j] = mean((Boston$crim[folds == i] - pred) ^ 2)
+  }
+}
+rmse.cv = sqrt(apply(cv.errors, 2, mean))
+plot(
+  rmse.cv,
+  pch = 16,
+  type = "l",
+  col = 4,
+  lwd = 2,
+  xlab = "Nos of predictors in the model",
+  ylab = "rmse estimate--10 fold CV"
+)
+abline(
+  h = c(131:135) * 0.05,
+  v = 0:13,
+  lty = 3,
+  col = "blue"
+)
+
+which.min(rmse.cv)
+rmse.cv[which.min(rmse.cv)]
+
+best.fit = regsubsets(crim ~ ., data = Boston[folds != i,],
+                      nvmax = p)
+summary(best.fit)
+
+
+cat("Lasso")
+
+x = model.matrix(crim ~ . - 1, data = Boston)
+y = Boston$crim
+set.seed(702)
+cv.lasso = cv.glmnet(x, y, type.measure = "mse")
+plot(cv.lasso)
+coef(cv.lasso)
+cat("MSE")
+cv.lasso$cvm[cv.lasso$lambda == cv.lasso$lambda.1se]
+
+
+cat("Ridge")
+x = model.matrix(crim ~ . - 1, data = Boston)
+y = Boston$crim
+set.seed(702)
+cv.ridge = cv.glmnet(x, y, type.measure = "mse", alpha = 0)
+plot(cv.ridge)
+
+cat("coeffs")
+coef(cv.ridge)
+cat("MSE")
+cv.ridge$cvm[cv.ridge$lambda == cv.ridge$lambda.1se]
+
+
+cat("PCR")
+set.seed(702)
+pcr.fit = pcr(crim ~ .,
+              data = Boston,
+              scale = TRUE,
+              validation = "CV")
+summary(pcr.fit)
+
+```
+
+
+Best subset selection: Thirteen predictors were selected from the data and Best subset was determined to include 12 variables as "best" for 10 fold CV. The RMSEs of the best k-predictor model is shown in Figure 1. MSE here is `r (min(rmse.cv))^2`
+
+
+Lasso: The lasso model forced all the coefficients to zero, except for the rad variable. Plot from Lasso for MSE against log(Lambda) is shown. MSE remains same for variables 4 to 13. Variables below 4, the MSE starts to increase. 
+
+Ridge: Ridge method tends to keep all the variables and no variable was forced to zero. Plot shows the MSE against log(Lambda) as in Lasso.
+
+PCR: Based on the summary from PCR, using all 13 components yields the lowest MSE. The MSE in this case is  `r 6.575^2`, slightly higher than the best subset selection.
+
+
+
+
+(b) Propose a model (or set of models) that seem to perform well on
+this data set, and justify your answer. Make sure that you are
+evaluating model performance using validation set error, crossvalidation,
+or some other reasonable alternative, as opposed to
+using training error.
+
+```{r,echo=FALSE,warning=FALSE}
+
+data.frame(subset_MSE = (min(rmse.cv))^2, Lasso_MSE = cv.lasso$cvm[cv.lasso$lambda == cv.lasso$lambda.1se], Ridge_MSE = cv.ridge$cvm[cv.ridge$lambda == cv.ridge$lambda.1se], PCR_MSE = 6.575^2 )
+
+```
+
+Here, I am using Validation set MSE for evaluating model performance. Based on the MSE calculated in (a), I think Subset would have better performance followed by PCR model.
+
+
+(c) Does your chosen model involve all of the features in the data
+set? Why or why not?
+
+For the model I chose (Subset),  thirteen predictors were selected from the data and Best subset was determined to include 12 variables as "best" for 10 fold CV. This suggest that 12 predictor variables are contributing in predicting the response variable.

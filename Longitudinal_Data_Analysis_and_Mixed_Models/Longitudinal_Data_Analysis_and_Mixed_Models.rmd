@@ -1,0 +1,486 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Longitudinal data analysis and mixed models"
+date: 2023-10-28T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+summary: Statistics series
+---
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+
+Understanding the overall progression of disease is critical to the timing of therapeutic interventions and design of effective clinical trials. Disease progression can be assessed with longitudinal study designs in which outcomes are measured repeatedly over time and are assessed with respect to risk factors, either measured repeatedly or at baseline. Longitudinal data allows researchers to assess temporal disease aspects, but the analysis is complicated by complex correlation structures, irregularly spaced visits, missing data, and mixtures of time-varying and static covariate effects.
+
+Read more on this [here.](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5633048/table/T1/?report=objectonly)
+
+
+## Part 1 ##
+
+Here we will use the data `Beat the Blues` from package `HSAUR3` to construct boxplots and compare the factor variable $\textbf{drug}$. We will do the same for the $\textbf{length}$ variable and discuss our results.
+
+```{r}
+library("gee")
+library("lme4")
+library("Matrix")
+library("multcomp")
+library (HSAUR3)
+library(ggplot2)
+library(plyr)
+library(tidyr)
+
+# Construct boxplots to compare the factor variable \textbf{drug} in an
+# analogous way to how we constructed boxplots for the treatment
+# variable.
+data("BtheB")
+
+layout(matrix(1:2, nrow=1))
+
+ylim=range(BtheB[ , grep("bdi", names(BtheB))],
+           na.rm=TRUE)
+
+yes=subset(BtheB, drug=="Yes")[ , grep("bdi", names(BtheB))]
+boxplot(yes, main="Drugs Used", ylab="BDI",
+        xlab="Time (in Months)", names=c(0,2,3,5,8), 
+        ylim=ylim)
+
+no=subset(BtheB, drug=="No")[ , grep("bdi", names(BtheB))]
+boxplot(no, main="Drugs Not Used", ylab="BDI",
+        xlab="Time (in Months)", names=c(0,2,3,5,8), 
+        ylim=ylim)
+
+#Repeat for the length variable. Discuss the results.
+layout(matrix(1:2, nrow = 1))
+lengthlow<-subset(BtheB,length=="<6m")[,grep("bdi",names(BtheB))]
+boxplot(lengthlow, main ="Length<6m", ylab= "BDI", xlab = "Time (in months)",names=c(0,2,3,5,8))
+
+lengthhigh<-subset(BtheB,length==">6m")[,grep("bdi",names(BtheB))]
+boxplot(lengthhigh, main ="Length>6m", ylab= "BDI", xlab = "Time (in months)",names=c(0,2,3,5,8))
+```
+The plots demonstrate that BDI (median or average) declines at a faster rate if they do not take the medication. The plots also demonstrate that when patients live for less than 6 months, BDI (median or average) declines at a higher pace than when patients survive for more than months.
+
+
+Next, we will use the $\textit{lm}$ function to fit a model to the Beat the Blues data that assumes that the repeated measurements are independent. Compare the results to those from fitting the random intercept model $\textit{BtheB\_lmer1}$.
+```{r}
+BtheB$subject=factor(rownames(BtheB))
+nobs=nrow(BtheB)
+cat("Let change the data in wide format")
+BtheB_long=reshape(BtheB, idvar = "subject",
+                   varying = c("bdi.2m", "bdi.3m", "bdi.5m", "bdi.8m"),
+                   direction = "long")
+BtheB_long$time=rep(c(2, 3, 5, 8), rep(nobs, 4))
+
+
+BtheB_lm=lm(bdi ~ bdi.pre + time + treatment + drug + 
+              length, data=BtheB_long, na.action=na.omit)
+
+summary(BtheB_lm)
+
+BtheB_lmer1=lmer(bdi ~ bdi.pre + time + treatment + drug +
+                   length + (1 | subject), data=BtheB_long,
+                 REML=FALSE, na.action=na.omit)
+
+cftest(BtheB_lmer1)
+
+cat("Comparison of lm and lmer")
+anova(BtheB_lmer1,BtheB_lm)
+
+
+cat("We can plot the residuals from Linear model")
+plot(BtheB_lm, which=2)
+# Assumptions for Mixed-model
+
+residuals <- function(object, obs) obs-predict(object) 
+cat("We can also plot the residuals from linear mixed-model")
+layout(matrix(1:2, ncol = 2))
+qint <- ranef(BtheB_lmer1)$subject[["(Intercept)"]]
+qres <- residuals(BtheB_lmer1,BtheB_long$bdi.pre)
+qqnorm(qint, ylab = "Estimated random intercepts",
+     xlim = c(-3, 3), ylim = c(-20, 20),
+     main = "Random intercepts")
+qqline(qint, col="red", lwd=3)
+qqnorm(qres, xlim = c(-3, 3), ylim = c(-20, 20),
+     ylab = "Estimated residuals",
+     main = "Residuals")
+qqline(qres, col="red", lwd=3)
+```
+In linear model, Bdi.pre, time, treatmentBtheB, and drugYes are significant, but in the lmer model, only bdi.pre and time are significant. This means that the linear model understates the standard errors because it does not account for the correlation over time or the repeated measures.
+  
+In the first output, the linear model shows that there is interation between time and treatment with P < 0.05. However, mixed effect model (lmer) indicates that there is no time and treatment effect because p is 0.09.
+
+Next, we will investigate and discuss whether there is any evidence of an interaction between treatment and time for the Beat the Blues data.
+```{r}
+# Investigate and discuss whether there is any evidence of an interaction
+# between treatment and time for the Beat the Blues data.
+
+cat("Testing fitted linear model with lm")
+BtheB_lm2=lm(bdi ~ bdi.pre + time + treatment + drug +
+                   length + time*treatment + subject, 
+                 data=BtheB_long, REML=FALSE, na.action=na.omit)
+summary(BtheB_lm2)
+
+cat("Testing fitted linear mixed-model with lmer subject as a random effect")
+BtheB_lmer2=lmer(bdi ~ bdi.pre + time + treatment + drug +
+                   length + time*treatment + (1 | subject), 
+                 data=BtheB_long, REML=FALSE, na.action=na.omit)
+
+cftest(BtheB_lmer2)
+```
+Now, we will create a plot of the mean profiles of both treatment groups in the Beat the Blues data, showing also standard deviation bars at each time point.
+```{r}
+# Create a plot of the mean profiles of both treatment groups in the Beat
+# the Blues data, showing also standard deviation bars at each time point.
+data_sum=ddply(BtheB_long, c("time", "treatment"), summarise, 
+            N=sum(!is.na(bdi)),
+            mean=mean(bdi, na.rm=TRUE),
+            sd=sd(bdi, na.rm=TRUE),
+            se=sd/sqrt(N))
+
+pd <- position_dodge(0.1)
+
+ggplot(data_sum, aes(x=time, y=mean, colour=treatment)) +
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.1, position=pd) +
+  geom_line(position=pd) +
+  geom_point(position=pd) + 
+  theme_classic() +
+  labs(title = "Mean profiles of both treatment groups")
+
+```
+The mean profile shows that the results are very different between the two categories, but the standard deviation bars converge.
+
+Now, consider the $\textbf{phosphate}$ data from the package `HSAUR3`. This data shows the plasma inorganic phosphate levels for 33 subjects, 20 of whom are controls and 13 of whom have been classified as obese (Davis, 2002). First, we will create boxplots by group and discuss the results below.
+```{r}
+data("phosphate", package = "HSAUR3")
+library(lme4)
+library(Matrix)
+library(multcomp)
+attach(phosphate)
+par(mfrow = c(1,2))
+ylim <-range(phosphate[,-1], na.rm = TRUE)
+# Construct boxplots by group and discuss. 
+boxplot(phosphate[group == "control", -1], 
+        xlab = "time", ylab = "Phosphate level",
+        main = "base R: Control group", ylim = ylim)
+boxplot(phosphate[group == "obese",-1],
+        xlab = "time", ylab = "Phosphate level",
+        main = "Obese group", ylim = ylim)
+
+# ggplot version:
+phosphate %>%
+  gather(time,phosphate_level, 2:9) %>%
+  mutate(time = factor(gsub(time,pattern="[[:alpha:]]",replacement=''))) %>%
+ggplot(aes(x=time,y=phosphate_level)) +
+  geom_boxplot() +
+  facet_grid(.~group) +
+  labs(title='ggplot: Phosphate Data by Groups',
+       x='Time (hours)',
+       y='Phosphate level') +
+  theme_classic()
+
+```
+Based on the plot, the control group has the median level of phosphate falling rapidly from a higher level of 4.3 to midway between t1 and t2 and starts to rise more rapidly over time. The obese group reached a relatively higher median phosphate rate close to 5 and dropped and grew steadily over time. The Obese group also has two outliers.
+
+Next, we will create separate plots of the profiles of the individuals in each group.
+```{r}
+# Produce separate plots of the profiles of the individuals in each group
+layout(matrix(1:2, nrow=1))
+
+rg=range(phosphate[ ,-1])
+plot(c(1, 8), c(rg), type="n", xlab="Time (hours)", 
+     ylab="Phosphate Levels", main="base R: Control Group")
+for(i in 1:sum(phosphate$group=="control")){
+  lines(1:8, phosphate[i, -1])
+}
+
+plot(c(1, 8), c(rg), type="n", xlab="Time (hours)", 
+     ylab="Phosphate Levels", main="Obese Group")
+for(i in 1:sum(phosphate$group=="obese")){
+  lines(1:8, phosphate[nrow(phosphate)-i, -1])
+}
+
+
+phosphate_t <- phosphate
+phosphate_t$subject <- factor(rownames(phosphate_t))
+
+phosphate_t %>%
+  gather(time,phosphate_level, 2:9) %>%
+  mutate(time = factor(gsub(time,pattern="[[:alpha:]]",replacement=''))) %>%
+ggplot(aes(x=time,y=phosphate_level)) +
+  geom_line(aes(group=subject,color=subject),size=1) +
+  facet_grid(.~group) +
+  labs(title='ggplot: Phosphate by group',
+       x='Time (in hours)',
+       y='Phosphate Level') +
+  theme_classic()
+
+```
+Guided by how these plots fit, we may be interested to find out which linear mixed effects models might be sensible based on the intercept and slope, intercept and interaction. 
+
+Here, linear mixed model would be suitable because the slopes and intercepts in each group vary widely. Additionally, there is an interaction between control and obese groups based on time. So fitting something of the form $\textit{lmer(phosphatelevel t0+time∗group+(1= phos)}$ would be suitable.
+
+In the fixed effect model, we see that there is a positive relation between the time and the phosphate level. It makes sense sinse we saw that after decreasing for a while the phosphate level increases for longer than decreasing time period.  Based on the f-test with cftest  , time, group, baseline phosphate level and the interaction between time and group all are significant. 
+
+Next, we will convert the data to long version and fit the model of your choice and discuss the results. 
+```{r}
+# Convert the data to long version and fit the model 
+data(phosphate)
+ph=phosphate
+ph$subject=as.factor(rownames(ph))
+##LOng form
+a=ph[,c(3:9)]
+
+ph_long=reshape(ph,idvar="subject",v.names="p_level",
+                varying=list(names(a)),direction="long")
+
+timer=seq(1:7)
+timer[1]=0.5
+timer[2]=1
+timer[3]=1.5
+for(i in 4:7){
+  timer[i]=i-2}
+
+for(i in 1:7){
+  for(j in 1:33){
+    ph_long[(33*(i-1)+j),4]=timer[i]
+  }
+}
+
+ph_non_inter=lmer(p_level~time+group+t0+(1|subject),data=ph_long,
+                  REML=FALSE,na.actio=na.omit)
+
+ph_inter=lmer(p_level~time+group+t0+time*group+(1|subject),
+              data=ph_long,REML=FALSE,na.actio=na.omit)
+
+ph_cept_slope=lmer(p_level~time+group+t0+
+                     (time|subject),
+              data=ph_long,REML=FALSE,na.actio=na.omit)
+
+ph_cept_slope_inter=lmer(p_level~time+group+t0+time*group+
+                           (time|subject),
+                         data=ph_long,REML=FALSE,na.actio=na.omit)
+
+print(summary(ph_cept_slope_inter))
+print(cftest(ph_cept_slope_inter))
+anova(ph_inter,ph_non_inter,ph_cept_slope,ph_cept_slope_inter)
+
+pred=predict(ph_cept_slope_inter)
+MSE=mean((pred-ph_long$p_level)^2)
+message("Mean Squared Error: ",MSE)
+message("Mean Phosphate Level: ",mean(ph_long$p_level))
+```
+   
+Comparing this with three other models, (ph_non_inter=random intercept, ph_inter=random intercept with interaction, ph_cept_slope=random intercept and random slope) using anova, the model used here has the smallest AIC (about 391) indicating a better fit of among four models. However, considering BIC value, we also see that random intercept with interaction is also a good model.
+
+
+## Part 2 ##
+
+Now, consider the $\textbf{respiratory}$ data from the $\textbf{HSAUR3}$ package. Then, investigate the use of other correlational structures than the independence and exchangeable structures used in the text for the respiratory data.
+   
+```{r}
+library(HSAUR3)
+library(gee)
+library(geepack)
+library(lme4)
+library(MuMIn)
+library(multcomp)
+
+cat("1a")
+
+data("respiratory", package="HSAUR3")
+head(respiratory)
+dim(respiratory)
+
+resp_sub <- subset(respiratory, month > "0")
+resp_sub$baseline <- rep(subset(respiratory, month == "0")$status,rep(4, 111))
+
+resp_sub$nstat <- as.numeric(resp_sub$status == "good")
+resp_sub$month <- resp_sub$month[, drop = TRUE]
+head(resp_sub, n = 3)
+
+
+names(resp_sub)[names(resp_sub) == "treatment"] <- "trt"
+levels(resp_sub$trt)[2] <- "trt"
+
+cat("Now, fitting the models")
+resp_sub_glm <- glm(status ~ centre + trt + gender + baseline + age, data = resp_sub, family = "binomial")
+
+resp_sub_gee1 <- gee(nstat ~ centre + trt+ gender + baseline + age, data = resp_sub, family = "binomial", id = subject, corstr = "independence", scale.fix = TRUE, scale.value = 1)
+
+resp_sub_gee2 <- gee(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "exchangeable", scale.fix = TRUE, scale.value = 1)
+
+resp_sub_gee3 <- gee(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "unstructured", scale.fix = TRUE, scale.value = 1)
+
+resp_sub_gee4 <- gee(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "AR-M", scale.fix = TRUE, scale.value = 1)
+
+cat(" Summary")
+knitr::kable(summary(resp_sub_glm)$coeff, caption = "Summary coeff of GLM binomial")
+
+knitr::kable(summary(resp_sub_gee1)$coef, caption = "Summary coeff of GEE binomial independent")
+
+knitr::kable(summary(resp_sub_gee2)$coef, caption = "Summary coeff of GEE binomial exchangeable")
+
+knitr::kable(summary(resp_sub_gee3)$coef, caption = "Summary coeff of GEE binomial unstructured")
+
+knitr::kable(summary(resp_sub_gee4)$coef, caption = "Summary coeff of GEE binomial AR-M")
+
+```
+
+Looking at the difference between Naive z and Robust z with relevant variables for the above models, resp_sub_gee3 with unstructured comparison correlation structure model tends to have a minimal difference between Naive z and Robust z than others. Therefore, in this case, unstructured model fits best.
+
+
+Which model is the best? Compare the following models: independent, exchangable, and what ever models we tried previously. Perhaps we can use QIC (in \textbf{MESS}), MSE, misclassification rate, comparison of naive vs robust Z-score, or another method.
+    
+```{r,echo=FALSE}
+
+library(MESS)
+cat("Fitting GEE Independent")
+resp_sub_gee1 <- geeglm(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "independence")
+
+knitr::kable(QIC(resp_sub_gee1), caption = "QIC from GGE independent")
+
+cat("Fitting GEE Exchangeable")
+resp_sub_gee2 <- geeglm(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "exchangeable")
+knitr::kable(QIC(resp_sub_gee2), caption = "QIC from GGE exchangeable")
+
+cat("Fitting GEE Unstructured")
+resp_sub_gee3 <- geeglm(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "unstructured")
+knitr::kable(QIC(resp_sub_gee3), caption = "QIC from GGE Unstructured")
+
+cat("Fitting GEE ar1")
+resp_sub_gee4 <- geeglm(nstat ~ centre + trt + gender + baseline + age, data =resp_sub, family = "binomial", id = subject, corstr = "ar1")
+knitr::kable(QIC(resp_sub_gee4), caption = "QIC from GGE ar1")
+
+```
+
+As mentioned above, `resp_sub_gee3` with unstructured correlation structure model has slightly minimal difference of Naive z and Robust z than others. We used the QIC value to compare the result, it looks like the third model with unstructured correlation structure model has a lower QIC value of 495.74 than the other three models. So, the model with unstructured correlation structure is the best among four.
+
+Now, we will use the dataset $\textbf{schizophrenia2}$ from $\textbf{HSAUR3}$ package. This was collected in a follow-up study of women patients with schizophrenia (Davis, 2002). The binary response recorded at 0, 2, 6, 8 and 10 months after hospitalization was ``thought disorder'' (absent or present). The single covariate is the factor indicating whether a patient had suffered early or late onset of her condition (age of onset less than 20 years or age of onset 20 years or above). 
+
+The question of interest is whether the course of the illness differs between patients with early and late onset schizophrenia. (https://www.rdocumentation.org/packages/HSAUR3/versions/1.0-9/topics/schizophrenia2)
+
+We will now investigate this question using plots and summary statistics
+    
+```{r,echo=FALSE}
+
+library("vcd")
+library("gee")
+library(printr)
+library(dplyr)
+data("schizophrenia2", package = "HSAUR3")
+
+cat("Calculating percentage data")
+younger_percentage <- c( nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 0 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 0))),
+                  nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 2 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 2))),
+                  nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 6 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 6))),
+                  nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 8 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 8))),
+                  nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 10 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 10))))
+
+older_percentage <- c( nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 0 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 0))),
+                  nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 2 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 2))),
+                  nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 6 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "< 20 yrs" & month == 6))),
+                  nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 8 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 8))),
+                  nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 10 & disorder == "present"))) / 
+                    nrow(subset(schizophrenia2, (onset == "> 20 yrs" & month == 10))))
+
+younger_percentage %>% summary() %>% as.matrix() %>% t() %>% knitr::kable(caption = "Summary statistics for presence of younger onset data")
+
+older_percentage %>% summary() %>% as.matrix() %>% t() %>% knitr::kable(caption = "Summary statistics for presence of older onset data")
+
+
+plot(x = seq(1:5), y=younger_percentage, type="l", col=1, xaxt="n", ylim=c(0,0.8),
+     xlab="Months", ylab="Percent present", main = "Percent present by age at Onset")
+lines(older_percentage, col=4)
+legend("topright", legend=c("Percent present at Onset < 20 years", "Percent Present at Onset > 20 years"), 
+       col=   c("1", "4"), lty = c(1, 1))
+axis(side=1, at=seq(1:5), labels = c(0, 2, 6, 8, 10))
+axis(side=2, at=seq(1:11), labels = c(0, 0.1, .2, .3, .4, .5, .6, .7, .8, .9, 1))
+
+```
+
+For the older-onset population, the mean and the median of the percentage of' presence of schizophrenia' are lower. Looking at the percentage plot, it appears that at each sample date (in months) the percentage is lower in the older-onset population. 
+
+Then with the GEE approach:
+```{r,echo=FALSE}
+schiz <- subset(schizophrenia2, month > "0")
+schiz$baseline <- rep(subset(schizophrenia2, month =="0")$disorder, rep(4,44))
+schiz$ndisorder <- as.numeric(schiz$disorder == "present")
+schiz$month <- schiz$month[, drop = TRUE]
+
+
+resp_sub_gee1 <- geeglm(ndisorder ~ onset + month + baseline,
+                 data = schiz, family = "binomial", id = subject,
+                 corstr = "independence")
+                 
+
+
+resp_sub_gee2 <- geeglm(ndisorder ~ onset + month + baseline,
+                 data = schiz, family = "binomial", id = subject,
+                 corstr = "exchangeable")
+                 
+
+
+resp_sub_gee3 <- geeglm(ndisorder ~ onset + month + baseline,
+                 data = schiz, family = "binomial", id = subject,
+                 corstr = "unstructured")
+                 
+knitr::kable(QIC(resp_sub_gee1), caption = "QIC from GEE Independent (identity)")
+
+knitr::kable(QIC(resp_sub_gee2), caption = "QIC from GEE Exchangeable")
+knitr::kable(QIC(resp_sub_gee3), caption = "QIC from GEE Unstructured")
+
+```
+In exchangeable and unstructured model, the QIC score is the lowest. So for the selection of model, either model can be a good choice. However, comparing parameters such as CIC, QICu and QICC, I think the exchangeable model seems better.
+
+
+Then with the mixed effects model (lmer):
+```{r,echo=FALSE}
+
+schiz_glm <- glm(ndisorder ~ onset + baseline + month, data = schiz, family = "binomial")
+
+# LMER
+schiz_lmer1 <- lmer(ndisorder ~ onset + month + baseline +                (1 | subject), data = schiz,  REML = FALSE, na.action = na.omit)
+schiz_lmer2 <- lmer(ndisorder ~ onset + month + baseline +                (month | subject), data = schiz,  REML = FALSE, na.action = na.omit)
+schiz_lmer3 <- lmer(ndisorder ~ onset + month + baseline + month*onset +  (1 | subject), data = schiz,  REML = FALSE, na.action = na.omit)
+schiz_lmer4 <- lmer(ndisorder ~ onset + month + baseline + month*onset +  (month | subject), data = schiz,  REML = FALSE, na.action = na.omit)
+print("Without interaction term:")
+print(paste("BIC: Fixed Slope : ", BIC(schiz_lmer1)))
+print(paste("BIC: Random Slope: ", BIC(schiz_lmer2)))
+print("With interaction term: month v. onset:")
+print(paste("BIC: Fixed Slope : ", BIC(schiz_lmer3)))
+print(paste("BIC: Random Slope: ", BIC(schiz_lmer4)))
+```
+
+
+Here, we will try to see if there is a difference between the models and what model(s) work the best. We will do model comparison with ANOVA:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+cat("Fixed Slope v. Random Slope (no intaction term)")
+anova(schiz_lmer1, schiz_lmer2) # .
+cat("Interaction Term v. No Interaction Term (fixed slope)")
+anova(schiz_lmer1, schiz_lmer3) # 
+cat("Fixed Slope, No interaction Term v. Random Slope, With interaction term")
+anova(schiz_lmer1, schiz_lmer4) # 
+cat("Random Slope, No interaction term v. Fixed Slope, With interaction term")
+anova(schiz_lmer2, schiz_lmer3) # *
+cat("No interaction term v. Interaction term (random slope)")
+anova(schiz_lmer2, schiz_lmer4) # 
+cat("Fixed Slope v. Random Slope (with intaction term)")
+anova(schiz_lmer3, schiz_lmer4) # .
+```   
+  
+The model with a fixed effect and no interaction term has the lowest BIC score. This would be an indicator that the concept of contact is not likely to add much to the template if anything. The most significant difference based on ANOVA analysis is between random slope, no interaction term and fixed slope, with interaction term (fourth table). This is indicated with a p-score of 0.025 i.e., [P<0.05].

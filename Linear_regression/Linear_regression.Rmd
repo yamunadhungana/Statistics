@@ -1,0 +1,1804 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Linear regression"
+date: 2023-10-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+- Machine Learning
+summary: Statistics series
+---
+
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+Linear regression is a linear approach for modelling the relationship between a scalar response and one or more explanatory variables (also known as dependent and independent variables). The case of one explanatory variable is called simple linear regression; for more than one, the process is called multiple linear regression. This term is distinct from multivariate linear regression, where multiple correlated dependent variables are predicted, rather than a single scalar variable.
+
+Linear regression models are often fitted using the `least squares` approach, but they may also be fitted in other ways, such as by minimizing the "lack of fit" in some other norm (as with least absolute deviations regression), or by minimizing a penalized version of the least squares cost function as in ridge regression (${L2-norm}$ penalty) and lasso (${L1-norm}$ penalty). Conversely, the `least squares` approach can be used to fit models that are not linear models. Thus, although the terms "least squares" and "linear model" are closely linked, they are not synonymous.
+
+
+In this exercise series of linear regression, we will look at some problems to better understand the use case of linear regression.
+
+## Part 1 ##
+
+Consider the fitted values that result from performing linear regression without an intercept. In this setting, the $i-th$ fitted value takes the form $\hat{y_i} = x_i\hat{\beta}$, where
+\[\hat{\beta} = \frac{\sum_{i=1}^n x_iy_i}{\sum_{i'=1}^nx_{i'}^2}.\]
+
+Show that we can write:
+
+\[\hat{y}_i = \sum_{i=1}^na_iy_i.\]
+
+What is $a_{i'}$ ?
+
+Note: we interpret this result by saying that the fitted values from
+linear regression are linear combinations of the response values.
+
+```{r echo=FALSE, results='hide'}
+#\[\hat{y}_i = x_i\frac{\sum_{i=1}^n #x_iy_i}{\sum_{i'=1}^nx_{i'}^2} #\sum_{i=1}^n\frac{x_ix_i}{\sum_{i'=1}^nx_{i'}^2}y_i = #\sum_{i=1}^na_iy_i.\]*
+
+```
+
+Here, we can write: $$\hat{y}_i = x_i\frac{\sum_{i=1}^n x_iy_i}{\sum_{i'=1}^nx_{i'}^2}$$ 
+
+Where $$\frac{x_i}{\sum_{i'=1}^nx_{i'}^2}$$ is a constant value for each $i^{th}$ which can be represented as $c_{i'}$. If we have this on the equation above, we get:
+
+
+$$\hat{y}_i = c_{i'}{\sum_{i=1}^n x_iy_i} = {\sum_{i=1}^n c_{i'}x_iy_i}$$
+
+When we combine  $c_{i'}$ with $x_i$, we get $a_{i'}$. We could determine $a_{i'}$ as weight function over the $Y$ set to estimate the $y_i$ element.
+
+Now, we will perform some data analyses using ${Carseats}$ dataset. First, we will fit a multiple regression model to predict Sales using Price, Urban, and US.
+
+```{r}
+library(ISLR)
+library(knitr)
+library(caret)
+data(Carseats)
+head(Carseats)
+
+## make the regression model
+model_3.7.10.a=lm(Sales~Price+Urban+US,data=Carseats)
+summary(model_3.7.10.a)
+layout(matrix(1:4,nrow=2))
+plot(model_3.7.10.a,pch=16,col=4,cex=0.8)
+
+```
+
+
+Then we will provide an interpretation of each coefficient in the model. Be careful—some of the variables in the model are qualitative!
+
+Given the Unit sales (which is in thousands) at each location, we can interpret the result as follows: if there is 1 dollar change in price, `r abs(summary(model_3.7.10.a)$coef[2, 1]) * 1000` units in sales will go down keeping all other predictors fixed. We can also say that the unit sales in urban location are `r abs(summary(model_3.7.10.a)$coef[3, 1]) * 1000` units less than in rural location keeping all other predictors fixed. Likewise, we can also say that on average the unit sales in a US store are `r abs(summary(model_3.7.10.a)$coef[4, 1]) * 1000` units more than in a non US store keeping other predictors fixed.
+
+
+Now, we write out the model in equation form, being careful to handle the qualitative variables properly.
+
+\[Sales = `r summary(model_3.7.10.a)$coef[1, 1]` + (`r summary(model_3.7.10.a)$coef[2, 1]`)\times Price + (`r summary(model_3.7.10.a)$coef[3, 1]`)\times Urban + (`r summary(model_3.7.10.a)$coef[4, 1]`)\times US + \varepsilon\]
+
+with $Urban = 1$ if the store is in an urban location and $0$ if not, and $US = 1$ if the store is in the US and $0$ if not.
+
+
+Now, we will try to find out for which of the predictors we can reject the null hypothesis
+$H_0 : \beta_j = 0$ .
+
+
+**Answer:** 
+
+For Price and US, we can reject the Null Hypothesis at any significance level. The p-value (P<0.05) is the threshold value at which we can reject the Null hypothesis. 
+
+
+On the basis of our response to the previous question, we will fit a smaller model that only uses the predictors for which there is evidence of association with the outcome.
+
+```{r}
+
+model_3.7.10.e=lm(Sales~Price+US,data=Carseats)
+summary(model_3.7.10.e)
+layout(matrix(1:4,nrow=2))
+plot(model_3.7.10.e,pch=16,col=4,cex=0.8)
+
+```
+
+In this previous model, we removed the Urban variable. Urban variable did not have enough evidence of linear association with Sales. The summary statistics from this model show that both Price and US have nearly zero p-values, suggesting good linear association. We can also tell that the estimates of the coefficients are almost the same as the previous model, but the adjusted R-squared value now has slightly gone up.
+
+Now, see how well the models fit the data.
+
+```{r}
+
+## plots:
+data=Carseats[order(Carseats$Sales),]
+model_3.7.10.a=lm(Sales~Price+Urban+US,data=data)
+model_3.7.10.e=lm(Sales~Price+US,data=data)
+layout(matrix(1:2,nrow=1))
+## model A
+plot(data$Sales, col=1, cex=0.5,pch=16,ylim = c(-5,20), ylab="sales",
+     main="Sales~Price+Urban+US")
+points(model_3.7.10.a$fitted.values, col=4,cex=0.5,pch=16)
+legend("topright",bty="n",c("Actual Sales","Estimates Sales"),
+        col=c(1,4),pch=16)
+
+## model E
+plot(data$Sales, col=1, cex=0.5,pch=16,ylim = c(-5,20), ylab="sales",
+     main="Sales~Price+US")
+points(model_3.7.10.e$fitted.values, col=4,cex=0.5,pch=16)
+legend("topright",bty="n",c("Actual Sales","Estimates Sales"),
+       col=c(1,4),pch=16)
+        
+cat ("Est std err of the error of model_3.7.10.a")
+Aerror=sqrt(sum((model_3.7.10.a$residuals)^2)/model_3.7.10.a$df.residual)
+Aerror
+cat ("Est std err of the error of model_3.7.10.e")
+Eerror=sqrt(sum((model_3.7.10.e$residuals)^2)/model_3.7.10.e$df.residual)
+Eerror
+cat("Mean sales: ")
+mean(data$Sales)
+layout(matrix(1))
+hist(data$Sales)
+
+cat("Anova of model_3.7.10.a and model_3.7.10.e")
+kable(anova(model_3.7.10.a,model_3.7.10.e), caption = "Anova of model_3.7.10.a and model_3.7.10.e")
+
+```
+
+The adjusted R-squared values from the two models are 0.2335 (larger model) and 0.2354 (smaller model). So, i.e., [`summary(model_3.7.10.a)$r.sq` * `100`], which is roughly `r summary(model_3.7.10.e)$r.sq * 100`% (for smaller model) and `r summary(model_3.7.10.a)$r.sq * 100`% (for larger model) of the variability of the sales is explained by the models which means it doesn't explain a lot.
+
+In plots above, the estimated sales of the models (blue dots). Actual sales are represented by black dots. The estimated values are clustered roughly in between 5 and 10, underestimating the high Sales and overestimating the low Sales. Also the estimated std error of the error are computed to be 2.47 for both the models, which is relatively high for a response having a mean value of 7.5. The response is approximately normally distributed. Conducting anova with both models gave p-value 0.94 (which is high) suggesting  they are not different.
+
+
+Next, using the model built previously, obtain 95% confidence intervals for the coefficient(s).
+
+```{r}
+
+cat("For beta0: ")
+model_3.7.10.e$coeff[1]-0.63098*qt(0.95, 397)
+model_3.7.10.e$coeff[1]+0.63098*qt(0.975, 397)
+
+cat("For beta1: ")
+model_3.7.10.e$coeff[2]-0.00523*qt(0.975, 397)
+model_3.7.10.e$coeff[2]+0.00523*qt(0.975, 397)
+
+cat("For beta2: ")
+model_3.7.10.e$coeff[3]-0.25846*qt(0.975, 397)
+model_3.7.10.e$coeff[3]+0.25846*qt(0.975, 397)
+
+cat("Or we can also simply use confint function: ")
+
+kable(confint(model_3.7.10.e, level = 0.95), caption = "95% confidence intervals for the coefficient(s)")
+
+```
+
+Check if there is any evidence of outliers or high leverage observations in the model.
+
+```{r}
+# par(mfrow = c(2, 2))
+# plot(model_3.7.10.e)
+layout(matrix(1:4,nrow=2))
+plot(model_3.7.10.e,pch=16,col=4,cex=0.8)
+## Looks like 69 and 377 are the y outliers
+
+
+stdres=rstudent(model_3.7.10.e)
+hist(stdres, main = "Studentized Residuals")
+#min(stdres)
+
+cat("Additionally, we can point out the outliers: ")
+print(which(abs(stdres)>qt(0.995,397)))
+
+## leverage
+hii=lm.influence(model_3.7.10.e)$hat
+layout(matrix(1))
+
+sum(hii)
+barplot(hii,border = NA,col="gray40",ylim=c(0,0.05),xlab="Index",ylab="Leverage Statisitcs")
+abline(h=2*mean(hii),lwd=2,col=2)
+legend("topright","Threshold",bty="n",col=2, lwd=2, lty=1)
+which(hii>2*mean(hii))
+
+```
+
+
+The plot of standardized residuals versus leverage indicates the presence of a few outliers (at threshold of higher than 2 or lower than -2) which are `r print(which(abs(stdres)>qt(0.995,397)))`. We can also use studentized residuals to determine any outliers. It also indicates some high leverage observations because some points exceed (p + 1)/n i.e., (`r (3 + 1) / 400`)
+
+
+This problem involves the Boston dataset. We will now try to predict per capita crime rate using the other variables in this dataset. In other words, per capita
+crime rate is the response, and the other variables are the predictors.
+
+For each predictor, we will fit a simple linear regression model to predict the response. We will then find out in which of the models there is a statistically significant association between the predictor and the response. For this, we will create some plots to back up our assertions.
+
+```{r}
+library(MASS)
+attach(Boston)
+
+
+library(MASS)
+data(Boston)
+
+# We will loop over each variable
+layout(matrix(1:4,nrow=2))
+for(i in 2:(dim(Boston)[2])){
+  cat("Variable: ", names(Boston)[i])
+  model=lm(Boston$crim~Boston[,i])
+  print(summary(model))
+  for(j in 1:2){
+    plot(model, which=j,main=paste("Variable: ", names(Boston)[i]),
+         pch=16, col=j+2,cex=0.6,lwd=2)
+  }
+}
+
+## Brown Forsythe test
+library(lawstat)
+for(i in 2:(dim(Boston)[2])){
+  model=lm(Boston$crim~Boston[,i])
+  # if (levene.test(model$resid,Boston[,i],trim.alpha=0.5)$p.value <0.05){
+  cat("BF test p-value for the variable: ",names(Boston)[i])
+  # }
+  print(levene.test(model$resid,Boston[,i],trim.alpha=0.5)$p.value)
+}
+
+plot(crim ~ . - crim, data = Boston)
+
+```
+
+
+Statistically significant results were observed between the predictor and the response for every variable except the Charles River Dummy(chas). When looking at the response variables and crime in simple scatter plots, one can see how a general linear regression with these variables would allow for a better prediction of crime than simply using the mean of crime. That is, the data seems to have some slight shape sloping up or down, and isn't a random cloud of data.
+
+It is also important to note that although almost every variable is statistically significant, R-squared value is very low indicating that these predictors describe only a small amount of the variation in the response.
+
+Additionally,  the formal Brown Forsythe test produced evidence of homoscedasticity (meaning they all have same variance at every X) for the following 8 variables out of all 13 variables: indus, nox, rm, dis, rad, tax, ptratio, lstat, medv
+
+
+Here, we will fit a multiple regression model to predict the response using
+all of the predictors. We wil find out for which predictors
+we can reject the null hypothesis $H_0 : \beta_j = 0$.
+
+
+```{r}
+
+library(MASS)
+attach(Boston)
+fullmodel=lm(crim~.,data=Boston)
+summary(fullmodel)
+layout(matrix(1:4,nrow=2))
+plot(fullmodel, pch=16, col=j+2,cex=0.6,lwd=2)
+
+```
+
+It looks like we can reject the null hypothesis for predictors zn and black at P<0.05; medv at P<0.01; dis and rad at p<0.001. For the rest of the predictors we fail to reject the null hypothesis.
+
+We will also create a plot displaying the univariate regression coefficients on the x-axis, and the multiple regression coefficients on the y-axis. That is, each predictor is displayed as a single point in the plot. Its coefficient in a simple linear regression model is shown on the x-axis, and its coefficient estimate in the multiple linear regression model is shown on the y-axis.
+
+```{r}
+
+fullmodel=lm(crim~.,data=Boston)
+cat("Create a dummy dataframe first with multiple and univariate variables")
+multiple=rep(1, 13)
+univariate=rep(1, 13)
+
+
+coeffs=as.data.frame(cbind(multiple,univariate))
+for(i in 1:13){
+  coeffs$multiple[i]=fullmodel$coeff[i+1]
+}
+
+
+for(i in 2:14){
+  model=lm(Boston$crim~Boston[,i])
+  coeffs$univariate[i-1]=model$coeff[2]
+}
+layout(matrix(1))
+plot(multiple~univariate,data=coeffs,pch=16,col=2,cex=0.8,ylim=c(-20,10),
+     xlab="Univariate Coefficients",
+     ylab="Multiple Regression Coefficinets")
+grid(col = "lightgray", lty = "dotted")
+text(coeffs$univariate, coeffs$multiple, labels = names(Boston)[1:13],
+      pos = 3, offset = 0.7, col = 1)
+abline(0,1,col=3, lty=2, lwd=2)
+cmodel=(lm(multiple~univariate,data=coeffs))
+abline(cmodel$coeff[1],cmodel$coeff[2],col=4,lty=2, lwd=2)
+
+```
+
+Here in this plot each red dot represents a predictor. The x value is the estimated coefficient with the predictor when separate models were created. The y value is the estimated coefficient of multiple linear regression. The blue dotted line represents a regression line of the points. So, if both models were to return same estimation, then these points would follow a line with slope 1 passing through the origin. This line is shown by the green dotted line. We see a severe difference between these lines. When separate regression performed, some are larger and some are smaller than the estimated values from the full regression model.
+
+Now, check if there is any evidence of non-linear association between any of the
+predictors and the response. In this case, we will need to fit a model of the form below for each predictor X.
+
+$$Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3 + \varepsilon.$$
+
+
+```{r}
+
+attach(Boston)
+mod.fit.zn2 <- lm(crim ~ poly(zn, 3))
+summary(mod.fit.zn2)
+mod.fit.indus2 <- lm(crim ~ poly(indus, 3))
+summary(mod.fit.indus2)
+mod.fit.nox2 <- lm(crim ~ poly(nox, 3))
+summary(mod.fit.nox2)
+mod.fit.rm2 <- lm(crim ~ poly(rm, 3))
+summary(mod.fit.rm2)
+mod.fit.age2 <- lm(crim ~ poly(age, 3))
+summary(mod.fit.age2)
+mod.fit.dis2 <- lm(crim ~ poly(dis, 3))
+summary(mod.fit.dis2)
+mod.fit.rad2 <- lm(crim ~ poly(rad, 3))
+summary(mod.fit.rad2)
+mod.fit.tax2 <- lm(crim ~ poly(tax, 3))
+summary(mod.fit.tax2)
+mod.fit.ptratio2 <- lm(crim ~ poly(ptratio, 3))
+summary(mod.fit.ptratio2)
+mod.fit.black2 <- lm(crim ~ poly(black, 3))
+summary(mod.fit.black2)
+mod.fit.lstat2 <- lm(crim ~ poly(lstat, 3))
+summary(mod.fit.lstat2)
+mod.fit.medv2 <- lm(crim ~ poly(medv, 3))
+summary(mod.fit.medv2)
+
+```
+
+For predictor variables zn, rm, rad, tax and lstat, the p-values suggest that the cubic coefficient is not statistically significant. For variables "indus", "nox", "age", "dis", "ptratio" and "medv" as predictor, the p-values suggest the adequacy of the cubic fit. For variables "black" as predictor, the p-values suggest that the quadratic and cubic coefficients are not statistically significant, so in this latter case no non-linear effect is visible.
+
+
+## Part 2 ##
+
+Using a little bit of algebra, prove that (4.2) is equivalent to (4.3). In
+other words, the logistic function representation and logit representation
+for the logistic regression model are equivalent.
+
+4.2 is:
+
+$$p(X) = \frac{e^{\beta_0 + \beta_1 X}}{1 + e^{\beta_0 + \beta_1 X}}$$
+
+and 4.3 is :
+
+$$\frac{p(X)}{1-p(X)} = e^{\beta_0 + \beta_1 X}$$
+
+
+Solution:
+
+Suppose we have, $Y(X) = e^{\beta_0 + \beta_1 X}$ in equation 4.2. Then $p(X) = Y(X) / 1 + Y(X)$ .
+
+So, we have  $p(X) \left(1 + Y(X)\right) = Y(X)$ which is equivalent to :
+
+$$p(X) = Y(X) -  p(X) Y(X) = \left(1 - p(X)\right) Y(X)$$
+
+If we then divide both sides by $1 - p(X)$ and replace the original value of $Y(X)$, we then get equation 4.3.
+
+$$\frac{p(X)}{1-p(X)} = e^{\beta_0 + \beta_1 X}$$
+
+
+
+This next question should be answered using the ${Weekly}$ dataset, which
+is part of the ${ISLR}$ package. This data is similar in nature to the
+${Smarket}$ data, except that it contains ${1, 089}$ weekly returns for 21 years, from the beginning of 1990 to the end of 2010.
+
+So, we will first produce some numerical and graphical summaries of the Weekly
+data to if any pattern exists.
+
+```{r}
+
+library(ISLR)
+
+data(Weekly)
+head(Weekly)
+dim(Weekly)
+summary(Weekly)
+cor(Weekly[,-9])
+dim(cor(Weekly[,-9]))
+class(cor(Weekly[,-9]))
+
+sort(unlist(list(cor(Weekly[,-9]))),decreasing = T)[-c(1:8)]
+
+cat("There is great postive linear association with volume and year (volume increases with the time). seeing the different nature now:")
+
+plot(Volume~Year,data=Weekly,pch=16,cex=0.7,col=2,main="Weekly Data Plot")
+data=Weekly[,c(1,7)]
+library(plyr)
+group=ddply(data,~Year,summarise,mean=mean(Volume),sd=sd(Volume))
+lines(mean~Year,data=group,col=3,lwd=2)
+epsilon = 0.2
+for(i in 1:dim(group)[1]){
+  x=group$Year
+  up = group$mean[i] + group$sd[i]
+  low = group$mean[i] - group$sd[i]
+  segments(x[i],low , x[i], up,lwd=2,col=4)
+  segments(x[i]-epsilon, up , x[i]+epsilon, up,lwd=2,col=4)
+  segments(x[i]-epsilon, low , x[i]+epsilon, low,lwd=2,col=4)
+}
+
+
+library(ggplot2)
+library(GGally)
+data(Weekly)
+summary(Weekly)
+cor(Weekly[, -9])
+pairs(Weekly)
+ggpairs(Weekly)
+attach(Weekly)
+plot(Volume)
+qplot(Volume, main="Plot of Volume")
+#ggplot(Volume,aes(x=Index, y=Volume))+geom_point(size=1.5)
+
+```
+
+In the figure above (`Weekly Data Plot`), the green line indicates the mean Volume in each Year, red dots are the original observations, and the blue lines indicate the standard deviations of the Volumes for each Year.
+
+This analysis indicates that Year and Volume are highly correlated particularly after Year 1995 until the curve starts to decline after year 2010. Also, the variance change with respect to the change in mean volumne showing some positive relation with the mean Volume.
+
+Now, we will use the full data set to perform a logistic regression with Direction as the response and the five lag variables plus Volume as predictors. We will use the summary function to print the results and also examine if any of the predictors appear to be statistically significant. If so, we will also find them below.
+
+```{r}
+
+model.4.7.10.b=glm(Direction~.-Year-Today,data=Weekly,family = binomial)
+summary(model.4.7.10.b)
+
+```
+
+Based on the summary of the model, only Lag2 variable is statistically significant (at P<0.05). The estimated coefficient for this variable is 0.05844, which means we would expect mean increase of the log odd in favor of the market going up by a unit increase in Lag2 variable, keeping other predictors in the model constant. 
+
+
+Here, we will compute the confusion matrix and overall fraction of correct predictions. Explain what the confusion matrix is telling you about the types of mistakes made by logistic regression.
+
+
+```{r}
+
+computeIT=function(TH,model,data){
+  preds=rep("Down",dim(data)[1])
+  vals=predict(model,newdata=data,type="response")
+  for(i in 1:dim(data)[1]){
+    if(vals[i]>=TH){
+      preds[i]="Up"
+    }
+  }
+  ## Confusion matrix
+  cat("Confusion Matrix:")
+  con=table(preds,data$Direction)
+  print(con)
+  cat("Model Accuracy (Percentage):")
+  print(round(sum(preds==data$Direction)/dim(data)[1]*100,2))
+  cat("True Postive Rate, TPR (percentage):")
+  print(round(con[2,2]/(con[2,2]+con[1,2])*100,2))
+  cat("False Postive Rate, FPR (percentage):")
+  spec=con[1,1]/(con[1,1]+con[2,1])*100
+  print(round((100-spec),2))
+  
+}
+computeIT(0.5,model.4.7.10.b,Weekly)
+```
+
+
+In a good model we would expect large TPR and low FPR. In this analysis, using a threshold value of 0.5, the overall accuracy of the model is only 56.11%. Based on the confusion matrix, the True Positive Rate (TPR) of the model was calculated to be  92.07%, which is very good. The model gives 92.07% of the time right prediction, when the market goes up. But the thing that makes model very bad is the False Positive Rate (FRP). FPR for the model was calculated to be 88.84% (Specificity=11.16%) which means when the market is going Down, 88.84% of the time the model is predicting market to be going up, falsely. 
+
+Now, we will fit the logistic regression model using a training data period from 1990 to 2008, with Lag2 as the only predictor. Then compute the confusion matrix and the overall fraction of correct predictions for the held out data (that is, the data from 2009 and 2010).
+
+```{r}
+
+index=c(which(Weekly$Year==2009), which(Weekly$Year==2010))
+train=Weekly[-index,]
+test=Weekly[index,]
+model.4.7.10.d=glm(Direction~Lag2,data=train,family = binomial)
+summary(model.4.7.10.d)
+## Calculations for held out data
+summary(test$Direction)
+computeIT(0.5,model.4.7.10.d,test)
+```
+
+For the held out data (data from 2009 and 2010), the calculations were done as before. At a threshold value of 0.5, the model accuracy was 62.5%. There were 43 Down and 61 Up cases in the held out data. The model gave a decent TPR value of 91.8%. However, it was reasonably bad in the sense of FPR, with a value of 79.07%.
+
+
+
+In this problem, we will develop a model to predict whether a given car gets high or low gas mileage based on the Auto data set.
+
+We will first, create a binary variable, mpg01, that contains a 1 if mpg contains
+a value above its median, and a 0 if mpg contains a value below its median. You can compute the median using the median() function. Note we may find it helpful to use the data.frame() function to create a single data set containing both mpg01 and the other Auto variables.
+
+```{r}
+library(ISLR)
+data(Auto)
+mpg01=rep(NA,dim(Auto)[1])
+med=median(Auto$mpg)
+mpg01=ifelse(Auto$mpg<med,0,1)
+df=as.data.frame(cbind(Auto, mpg01))
+
+```
+
+Here, we will explore the data graphically in order to investigate the association
+between mpg01 and the other features. We will try to find the features that seem most likely to be useful in predicting mpg01. Scatterplots and boxplots may be useful tools to answer this question.
+
+```{r}
+k=c(2,3,4,5,6,7,8) ## taking just the relevant variables
+layout(matrix(1:4,nrow = 2))
+for(i in k){
+  boxplot(df[,i]~df$mpg01,col=rainbow(7),xlab="mpg01",ylab=names(df)[i])
+}
+
+newdf=df[,c(2,3,4,5,6,7,8,10)] ## mpg and names dropped
+plot(newdf,pch=16,cex=0.8,col=2)
+
+plot(horsepower~displacement,Auto,pch=16,cex=0.8,col=2)
+
+library(ggplot2)
+library(GGally)
+pairs(newdf) #pairwise correlation
+ggpairs(newdf,cardinality_threshold = 304)#ggpairs
+str(newdf)
+```
+
+Based on the plots, we see that there is a clear distinction between the distribution of cylinders in two groups. So is the case for horsepower, acceleration, origin, displacement, weight and year. US based cars are mostly condensed at lower mpg, whereas European and Japanese cars tend to be well distributed. Also, older cars tend to have lower mpg, and modern cars tend to have higher. We also expect correlation between the mechanical features of the cars, so from scatter plots it seems that there is very high correlations between the physical quantities.
+
+Now, we will split the data into a training set and a test set.
+
+```{r}
+
+lowmpg=subset(newdf,mpg01==0)
+highmpg=subset(newdf,mpg01==1)
+
+set.seed(1235)
+index1=sample((1:dim(lowmpg)[1]),size=round(0.5*dim(lowmpg)[1]),replace=F)
+index2=sample((1:dim(highmpg)[1]),size=round(0.5*dim(highmpg)[1]),replace=F)
+
+train1=lowmpg[index1,];   train2=highmpg[index2,] # training dataset 50%
+test1=lowmpg[-index1,];   test2=highmpg[-index2,] # test dataset 50%
+
+train=rbind(train1,train2)
+test=rbind(test1,test2)
+
+```
+
+The test and training data were created in the ration of 50:50 from high mpg and low mpg groups. Now, we will perform logistic regression on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01. We will then calculate the test errors of the model obtained.
+
+```{r}
+
+model.4.7.11.f.1=glm(mpg01~.,train,family=binomial)
+summary(model.4.7.11.f.1)
+
+showStats=function(cutoff,model,test){
+  preds=rep(0,dim(test)[1])
+  probs=predict(model,newdata=test, type="response")
+  for(i in 1:length(probs)){
+    if(probs[i]>=cutoff){
+      preds[i]=1
+    }
+  }
+  cm=table(preds, test$mpg01)
+  cat("Confusion Matrix:");print(cm)
+  ac=((cm[1,1]+cm[2,2])/sum(cm))*100
+  cat("Overall test accuracy (percentage) : ", round(ac,2))
+  cat("Misclassification rate (percantage): ",round((100-ac),2))
+  cat("True Postive Rate, TPR/Sensitivity (percentage): ",
+          round(cm[2,2]/(cm[2,2]+cm[1,2])*100,2))
+  spec=cm[1,1]/(cm[1,1]+cm[2,1])*100
+  cat("Specificity (percantage): ",round(spec,2))
+  cat("False Postive Rate, FPR (percentage): ",round((100-spec),2))
+}
+
+showStats(0.5,model.4.7.11.f.1, test)
+
+cat("Looking for influential correlation")
+library(car)
+kable(vif(model.4.7.11.f.1), caption = "VIF of model.4.7.11.f.1")
+model.4.7.11.f.2=glm(mpg01~.-displacement-cylinders,train,family=binomial)
+summary(model.4.7.11.f.2)
+
+
+kable(vif(model.4.7.11.f.2), caption = "VIF of model.4.7.11.f.2")
+
+showStats(0.5,model.4.7.11.f.2, test)
+
+cat("model with weight and year")
+model.4.7.11.f.3=glm(mpg01~weight+year,train,family=binomial)
+kable(vif(model.4.7.11.f.3), caption = "VIF of model.4.7.11.f.3")
+summary(model.4.7.11.f.3)
+showStats(0.5,model.4.7.11.f.3, test)
+
+```
+
+For first model (`model.4.7.11.f.1`, selecting all variables), the summary statistics showed statistical significance of just two variables, year (p-value nearly 0) and weight (p-value 0.007). No statistical significance was found for others at any default level. Still, an attempt was made to use this model for prediction on the test data. With a cutoff 0.5, the overall accuracy of the model on the test data was 90.31%. TPR and FPR were also reasonable, with values of 91.84% and 11.22% respectively. As seen earlier, there was correlation between the variables. To treat this, variance inflation factor (VIF) of the full model was examined. Using a cutoff of 10 for VIF, two variables, cylinders and displacement were deleted from the model because their corresponding VIFs were 6.05 and 8.94, respectively. Here as well (`model.4.7.11.f.1`), we see that year and weight variables were statistically significant. The VIF values looked okay this time. This model returned identical prediction as before. But there was decrease in the standard errors of the estimated coefficients as expected since we made collinearity treatment by deleting cylinders and displacement from the model. 
+
+The third model (`model.4.7.11.f.1`) was built, with only year and weight. Both were the only two variables significant in the previous two models. The estimated coefficients were not dramatically different from previous two, but there is a good improvement in the standard errors of the estimated coefficients. In this third model, we see some improvement in the overall prediction. Overall accuracy on the test data was found to be 91.84%, whereas previously it was 90.31%. TPR remained same. But FPR reduced to 8.16% from 11.22%.
+
+Here, we will write a function in RMD that calculates the misclassification rate, sensitivity, and specificity. The inputs for this function are a cutoff point, predicted probabilities, and original binary response. 
+
+```{r,echo=TRUE,warning=FALSE}
+
+cutoff <- 0.5
+pred_prob <- predict(model.4.7.10.b,newdata=Weekly, type="response")
+original <- Weekly$Direction
+
+Function.for.Q.4 = function(cutoff, pred_prob, original) {
+  predicted=rep("Down",length(original))
+  vals <- pred_prob
+  for(i in 1:length(original)){
+    if(vals[i]>=cutoff){
+      predicted[i]="Up"
+    }
+  }
+  
+  con.mat = table(predicted, original) # creating confusion matrix
+  MCR = (con.mat[1, 2] + con.mat[2, 1]) / sum(con.mat) ## misclassification rate
+  TPR = con.mat[2, 2] / (con.mat[2, 2] + con.mat[1, 2]) ## sensitivity= (yes,yes)/(true yes)
+  SPEC = con.mat[1, 1] / (con.mat[1, 1] + con.mat[2, 1]) ## specificity= (no,no)/(true no)
+  ## now return as a list
+  return(list(
+    Misclassification_Rate = MCR,
+    Sensitivity = TPR,
+    Specificity = SPEC
+  ))
+}
+
+
+Function.for.Q.4(cutoff, pred_prob, original)
+
+```
+
+
+## Part 3 ##
+
+We now examine the differences between LDA and QDA and answer some questions:
+
+
+If the Bayes decision boundary is linear, do we expect LDA or QDA to perform better on the training set? On the test set?
+
+Answer:
+
+we expect QDA to perform better on the training set if the Bayes decision boundary is linear because its higher flexiblity may yield a closer fit. On the test set, we expect LDA to perform better than QDA, because QDA could overfit the linearity on the Bayes decision boundary.
+
+
+If the Bayes decision boundary is non-linear, do we expect LDA
+or QDA to perform better on the training set? On the test set?
+
+Answer:
+
+We should expect QDA to perform better both on the training and test sets if the Bayes decision boundary is non-linear.
+
+In general, as the sample size n increases, do we expect the test
+prediction accuracy of QDA relative to LDA to improve, decline,
+or be unchanged? Why?
+
+Answer:
+
+Generally, QDA (which is more flexible than LDA and so has higher variance) is recommended if the training set is very large, so that the variance of the classifier is not a major concern.
+
+
+Note: This exercise will need in-depth understanding of https://en.wikipedia.org/wiki/Sensitivity_and_specificity
+
+
+Next, we will compare the logistic regression we performed in Part 2 above with the LDA analysis below using `Lag2` as th only predictor.
+
+Before we perform this analysis, there are few things we need to understand. Such as, discriminant analysis assumes a multivariate normal distribution because what we usually consider to be predictors are really a multivariate dependent variable, and the grouping variable is considered to be a predictor. This means that categorical variables that are to be treated as predictors in the sense you wish are not handled well. This is one reason that many, including myself, consider discriminant analysis to have been made obsolete by logistic regression. Logistic regression makes no distributional assumptions of any kind, on either the left hand or the right hand side of the model. Logistic regression is a direct probability model and doesn't require one to use Bayes' rule to convert results to probabilities as does discriminant analysis.
+
+Sources:
+(Dr. Harell: https://stats.stackexchange.com/questions/158772/can-we-use-categorical-independent-variable-in-discriminant-analysis)
+
+Also, see: https://stats.stackexchange.com/questions/95247/logistic-regression-vs-lda-as-two-class-classifiers
+
+Now fit the LDA using a training data period from 1990 to 2008, with Lag2 as the only predictor. Compute the confusion matrix and the overall fraction of correct predictions for the held out data (that is, the data from 2009 and 2010).
+
+
+```{r}
+library(MASS)
+library(ISLR)
+
+data(Weekly)
+index=c(which(Weekly$Year==2009), which(Weekly$Year==2010))
+train=Weekly[-index,]
+test=Weekly[index,]
+model4.7.10.e=lda(Direction~Lag2,data=train)
+
+
+computeLDA=function(model,data){
+  preds=(predict(model,newdata=data,type="response"))$class
+  cat("Confusion matrix:")
+  con=table(preds,data$Direction)
+  print(con)
+  cat("Model Accuracy (Percentage):")
+  print(round(sum(preds==data$Direction)/dim(data)[1]*100,2))
+  cat("True Positive Rate, TPR (percentage):")
+  print(round(con[2,2]/(con[2,2]+con[1,2])*100,2))
+  cat("False Postive Rate, FPR (percentage):")
+  spec=con[1,1]/(con[1,1]+con[2,1])*100
+  print(round((100-spec),2))
+  
+}
+
+computeLDA(model4.7.10.e,test)
+
+```
+
+
+In this case, just like in Part `2(d)` with the logistic regression, at a threshold value of 0.5, the model accuracy or the percentage of correct prediction was 62.5%. In other words 37.5% is the test error rate. We could also say that for weeks when the market goes up, the model is right 91.8032787% of the time. For weeks when the market goes down, the model is right only 20.9302326% of the time. These results are very close to those obtained with the logistic regression model which is not surpising.
+
+Now we will repeat the analysis we performed above, but with the QDA.
+
+```{r}
+
+model.4.7.10.f=qda(Direction~Lag2,data=train)
+computeLDA(model.4.7.10.f,test)
+
+# #check with caret function
+# tt <- predict(model.4.7.10.f,newdata=test,type="response")
+# gg <- confusionMatrix(tt$class, reference = test$Direction)
+# gg
+
+```
+
+In this case, the QDA model predicted all up, which is bad. The overall accuracy, TPR and FPR were 58.65%, 100% and 100%, respectively
+
+Again, repeat using KNN with K = 1.
+
+```{r}
+
+computeKNN=function(model,trues){
+  ## Confusion matrix
+  print("Confusion Matrix:")
+  con=table(model,trues)
+  print(con)
+  print("Model Accuracy (Percentage):")
+  print(round(((con[1,1]+con[2,2])/sum(con))*100,2))
+  print("True Positive Rate, TPR (percentage):")
+  print(round(con[2,2]/(con[2,2]+con[1,2])*100,2))
+  print("False Postive Rate, FPR (percentage):")
+  spec=con[1,1]/(con[1,1]+con[2,1])*100
+  print(round((100-spec),2))
+}
+
+library(class)
+attach(Weekly)
+head(Weekly)
+k_train = (Year < 2009)
+
+knn_train = as.matrix(Lag2[k_train])
+knn_test = as.matrix(Lag2[!k_train])
+train_class = Direction[k_train]
+
+model4.7.10.g=knn(knn_train, knn_test, cl=train_class, k = 1)
+computeKNN(model4.7.10.g, test$Direction)
+
+# # #check with caret function
+# gg <- confusionMatrix(model4.7.10.g, reference = test$Direction)
+# gg
+```
+
+With K=1, the KNN classification did not do a good job in the test set. The overall accuracy, TPR and FPR were 50%, 50.82% and 51.16% respectively. 
+
+If we compare the test error rates, we see that logistic regression and LDA have the minimum error rates, followed by QDA and KNN.
+
+Now, we will experiment with different combinations of predictors, including
+possible transformations and interactions, for each of the methods. Report the variables, method, and associated confusion matrix that appears to provide the best results on the held out data. Note that you should also experiment with values for
+K in the KNN classifier.
+
+```{r}
+
+## Since Lag1 and lag2 had the lowest p-vales, so trying with both
+for(i in 1:7){
+  plot(train$Direction~train[,i],xlab=names(train)[i],ylab="Direction",
+       main="Train Data")
+}
+
+## trying with different combinations
+formula1=Direction~Lag1
+formula2=Direction~Lag2
+formula3=Direction~Lag1+Lag2
+formula4=Direction~Lag1+Lag2+Lag1*Lag2
+formula5=Direction~Lag2+Lag5
+formula6=Direction~Lag2+Lag5+Volume
+formula7=Direction~Lag2+Volume
+formula8=Direction~Lag2+I(Lag2^2)
+
+
+## All the LDA mdoels 
+ldamodel1=lda(formula1,data=train)
+ldamodel2=lda(formula2,data=train)
+ldamodel3=lda(formula3,data=train)
+ldamodel4=lda(formula4,data=train)
+ldamodel5=lda(formula5,data=train)
+ldamodel6=lda(formula6,data=train)
+ldamodel7=lda(formula7,data=train)
+ldamodel8=lda(formula8,data=train)
+## Results
+computeLDA(ldamodel1,test)
+computeLDA(ldamodel2,test)
+computeLDA(ldamodel3,test)
+computeLDA(ldamodel4,test)
+computeLDA(ldamodel5,test)
+computeLDA(ldamodel6,test)
+computeLDA(ldamodel7,test)
+computeLDA(ldamodel8,test)
+
+## All the QDA mdoels 
+qdamodel1=qda(formula1,data=train)
+qdamodel2=qda(formula2,data=train)
+qdamodel3=qda(formula3,data=train)
+qdamodel4=qda(formula4,data=train)
+qdamodel5=qda(formula5,data=train)
+qdamodel6=qda(formula6,data=train)
+qdamodel7=qda(formula7,data=train)
+qdamodel8=qda(formula8,data=train)
+## Results (we can use the same function here)
+computeLDA(qdamodel1,test)
+computeLDA(qdamodel2,test)
+computeLDA(qdamodel3,test)
+computeLDA(qdamodel4,test)
+computeLDA(qdamodel5,test)
+computeLDA(qdamodel6,test)
+computeLDA(qdamodel7,test)
+computeLDA(qdamodel8,test)
+
+## KNN
+i=1
+ks=c(1,3,5,10,20,50,100)
+for(i in ks){
+  print("########################################")
+  print(paste0("K = ",i))
+  computeKNN(knn(knn_train, knn_test, cl=train_class, k = i), test$Direction)
+  print("########################################")
+}
+```
+
+Different combination of predictors with possible transformations and interactions were done. LDA and QDA model and associated confusion matrix was developed, and finally K in KNN classifier was done. The output is shown above with all combinations.
+
+Next, we will perform LDA on the training data in order to predict mpg01
+using the variables that seemed most associated with mpg01. We will then calculate the the test error of the model obtained.
+
+```{r}
+data(Auto)
+mpg01=rep(NA,dim(Auto)[1])
+med=median(Auto$mpg)
+mpg01=ifelse(Auto$mpg<med,0,1)
+df=as.data.frame(cbind(Auto, mpg01))
+
+k=c(2,3,4,5,6,7,8) ## taking just the relevant variables
+layout(matrix(1:4,nrow = 2))
+for(i in k){
+  boxplot(df[,i]~df$mpg01,col=rainbow(7),xlab="mpg01",ylab=names(df)[i])
+}
+newdf=df[,c(2,3,4,5,6,7,8,10)] ## mpg and names dropped
+plot(newdf,pch=16,cex=0.8,col=2)
+plot(horsepower~displacement,Auto,pch=16,cex=0.8,col=2)
+
+
+lowmpg=subset(newdf,mpg01==0)
+highmpg=subset(newdf,mpg01==1)
+set.seed(1235)
+index1=sample((1:dim(lowmpg)[1]),size=round(0.5*dim(lowmpg)[1]),replace=F)
+index2=sample((1:dim(highmpg)[1]),size=round(0.5*dim(highmpg)[1]),replace=F)
+train1=lowmpg[index1,];   train2=highmpg[index2,]
+test1=lowmpg[-index1,];   test2=highmpg[-index2,]
+autotrain=rbind(train1,train2)
+autotest=rbind(test1,test2)
+
+
+auto_formula=mpg01~cylinders+horsepower+acceleration+origin+displacement+weight+year 
+auto_model_lda=lda(auto_formula,data=autotrain)
+
+computeForAutoDA=function(model,test){
+  trues=test$mpg01
+  preds=(predict(model,newdata=test,type="response"))$class
+  con=table(preds,trues)
+  print("Confusion Matrix:")
+  print(con)
+  print("Model Accuracy (Percentage):")
+  print(round((con[1,1]+con[2,2])/sum(con)*100,2))
+  print("True Positive Rate, TPR (percentage):")
+  print(round(con[2,2]/(con[2,2]+con[1,2])*100,2))
+  print("False Postive Rate, FPR (percentage):")
+  spec=con[1,1]/(con[1,1]+con[2,1])*100
+  print(round((100-spec),2))
+}
+computeForAutoDA(auto_model_lda,autotest)
+
+```
+
+With the variables listed above, LDA was performed on the training set. Prediction was performed in the test data. The results are listed above. So, the test error rate is 100-91.84 = 8.16 %
+
+Now we will perform QDA on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01. We will then calculate the the test error of the model obtained.
+
+```{r}
+auto_model_qda=qda(auto_formula,data=autotrain)
+computeForAutoDA(auto_model_qda,autotest)
+
+
+```
+
+The test error rate is 100-90.31 = 9.69 % a little higher that the LDA.
+
+Next, we will perform KNN on the training data, with several values of K, in
+order to predict mpg01. Use only the variables that seemed most associated with mpg01. We will then calculate the test errors, and also see which value of $K$ seems to perform the best on this data set.
+
+```{r}
+
+library(class)
+
+sel.variables <- which(names(autotrain)%in%c("mpg01", "displacement", "horsepower", "weight", "acceleration", "year", "cylinders", "origin"))
+
+set.seed(1)
+accuracies <- data.frame("k"=1:10, acc=NA)
+for(k in 1:10){
+  knn.pred <- knn(train=autotrain[, sel.variables], test=autotest[, sel.variables], cl=autotrain$mpg01, k=k)
+  
+  # test-error
+  accuracies$acc[k]= round(sum(knn.pred!=autotest$mpg01)/nrow(autotest)*100,2)
+}
+
+accuracies
+
+```
+
+
+The error on the different k values are given on the output above.
+Here k=1 and k=7 was the best response out of all having lowest error rate.
+
+
+We we will explore this [website](https://archive.ics.uci.edu/ml/datasets.html; https://archive.ics.uci.edu/ml/) that contains open datasets that are used in machine learning. 
+
+We will explore the `iris` dataset available on this website [website](http://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data). It is one the most popular datasets in data science and have been widely used in pattern recognition literature. It is a small dataset with 150 samples, 3 categories of species and 4 features with the sepal length, sepal width, petal length and petal width (in cm). The classification problem in this dataset could be about predicting whether the given flower comes from which particular species or belongs to which species. This classification problem can be solved by developing a model which could be used to predict the flower by first training our model with the features and the labels. 
+
+We will try to analyze this data using the KNN or k-nearest neighbors. We will first read our data and check some basic statistics:
+
+```{r}
+
+# Read in `iris` data
+iris <- read.csv(url("http://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data"), header = FALSE) 
+
+str(iris)
+
+# Add column names
+names(iris) <- c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width", "Species")
+
+
+# Division of `Species`
+table(iris$Species) 
+
+# Percentual division of `Species`
+round(prop.table(table(iris$Species)) * 100, digits = 1)
+# Check the result
+# iris
+head(iris)
+
+library(ggplot2)
+# Iris scatter plot
+ggplot(iris, aes(x=Sepal.Length, y=Sepal.Width, col = Species)) +
+  geom_point()
+
+ggplot(iris, aes(x=Petal.Length, y=Petal.Width, col = Species)) +
+  geom_point()
+
+
+ggplot(iris, aes(x=Petal.Length, y=Petal.Width)) +
+  geom_point() + 
+  labs(title = "Scatter plot of all variables for petals")
+
+
+# Overall correlation `Petal.Length` and `Petal.Width`
+cor(iris$Petal.Length, iris$Petal.Width)
+
+
+# Return values of `iris` levels 
+x=levels(iris$Species)
+
+cat("Print Setosa correlation matrix")
+print(x[1])
+cor(iris[iris$Species==x[1],1:4])
+
+cat("Print Versicolor correlation matrix")
+print(x[2])
+cor(iris[iris$Species==x[2],1:4])
+
+cat("Print Virginica correlation matrix")
+print(x[3])
+cor(iris[iris$Species==x[3],1:4])
+
+```
+
+We can see that there is a high correlation between the sepal length and the sepal width of the Iris-setosa flowers, however Virginica and Versicolor flowers are somewhat less correlated. Based on the second plot, we can tell that the petal length and petal width are more correlated for all three Species. When we further analyze this data with all three species together, we can see that the correlation gets a bit stronger than it is when we examine different species separately (R = 0.96).
+
+Now, we will predict the species variable using KNN regression model. We can also normalize our dataset before doing the analysis.
+
+```{r}
+# create Normalize() function
+normalize <- function(x) {
+num <- x - min(x)
+denom <- max(x) - min(x)
+return (num/denom)
+}
+
+# Normalize the `iris` data
+iris_norm <- as.data.frame(lapply(iris[1:4], normalize))
+
+# Summarize 
+kable(summary(iris_norm),caption = "Summary of normalized iris data")
+
+```
+
+Now, we partition our data into test (33.33%) and training sets(66.66%).
+
+```{r}
+set.seed(54321)
+ind <- sample(2, nrow(iris), replace=TRUE, prob=c(0.67, 0.33))
+
+# Create training labels
+iris.trainLabels <- iris[ind==1,5]
+
+# Compose `iris` test labels
+iris.testLabels <- iris[ind==2, 5]
+
+# Now we can create the training and test datasets
+# create training set
+iris.training <- iris[ind==1, 1:4]
+
+cat("Top 6 rows of training set")
+head(iris.training)
+
+# Compose test set
+iris.test <- iris[ind==2, 1:4]
+
+cat("Top 6 rows of test set")
+head(iris.test)
+
+library(gmodels)
+library(class)
+# Build the model
+iris_pred <- knn(train = iris.training, test = iris.test, cl = iris.trainLabels, k=3)
+
+# Put `iris.testLabels` in a data frame
+irisTestLabels <- data.frame(iris.testLabels)
+
+# Merge `iris_pred` and `iris.testLabels` 
+merge <- data.frame(iris_pred, iris.testLabels)
+
+# Specify column names for `merge`
+names(merge) <- c("Predicted Species", "Observed Species")
+```
+
+From the above analysis we can now check predicted and observed species:
+
+```{r}
+cat("First 6 rows of predicted and observed species using KNN")
+head(merge)
+```
+
+We can also use caret package to check the accuracy of this model:
+
+```{r}
+
+cm <- confusionMatrix(merge$`Predicted Species`, reference = as.factor(merge$`Observed Species`))
+cm
+
+```
+
+We can see that the model accuracy is pretty high here. 
+
+## Part 4 ##
+
+Suppose we collect data for a group of students in a statistics class
+with variables ${X1 =hours}$ studied, ${X2 =undergrad GPA}$, and ${Y =received A}$. We fit a logistic regression and produce estimated
+coefficient, $\hat{\beta}_0 = -6$, $\hat{\beta}_1 = 0.05$, $\hat{\beta}_2 = 1$.
+
+Now, we will estimate the probability that a student who studies for 40 h and
+has an undergrad GPA of 3.5 gets an A in the class. For this question, we can simply plug in the beta values in this equation below:
+
+$$\hat{p}(X) = \frac{e^{\hat\beta_0 + \hat\beta_1 {X_1}}}{(1 + e^{\hat\beta_0 + \hat\beta_1 {X_1}})}$$
+
+As:
+
+$$\hat{p}(X) = \frac{e^{-6 + 0.05X_1 + X_2}}{(1 + e^{-6 + 0.05X_1 + X_2})} = \frac{e^{-6 + 0.05*40 + 1*3.5}}{(1 + e^{-6 + 0.05*40 + 1*3.5})} = 0.3775.$$
+```{r, eval = TRUE}
+cat("We can also write a function to calculate this and get the answer")
+calculate_prob <- function(x1,x2){ z <- exp(-6 + 0.05*x1 + 1*x2); return( round(z/(1+z),4))}
+calculate_prob(40,3.5)
+```
+
+Next, we will check how many hours would the student need to study to
+have a 50% chance of getting an A in the class. The equation for predicted probability gives us:
+
+$$\frac{e^{-6 + 0.05X_1 + 3.5}}{(1 + e^{-6 + 0.05X_1 + 3.5})} = 0.5$$
+
+from which, we get:
+
+$$e^{-6 + 0.05X_1 + 3.5} = 1$$
+    
+If we take log of both sides, we get:
+
+$$X_1 = \frac{2.5}{0.05} = 50$$
+
+```{r, eval = TRUE}
+cat("We can also use the function to calculate this and get the answer")
+hours <- seq(40,60,1)
+probs <- mapply(hours, 3.5, FUN = calculate_prob)
+names(probs) <- paste0(hours,"_hours")
+probs
+```
+
+Hence, to have 50 percent chance for securing A, the student has to study for 50 hours.
+
+Suppose, we wish to predict whether a given stock will issue a dividend this year (“Yes” or “No”) based on $X$, last year’s percent profit. We examine a large number of companies and discover that the mean value of $X$ for companies that issued a dividend was $\overline{X} = 10$, while the mean for those that didn't was $\overline{X} = 0$. In addition, the variance of X for these two sets of companies was $\hat{\sigma}^2 = 36$. Finally, 80% of companies issued dividends. Assuming that $X$ follows a normal distribution, predict the probability that a company will issue a dividend this year given that its percentage profit was $X = 4$ last year.
+
+Recall that the density function for a normal random variable
+is 
+$$f(x) = \frac{1}{\sqrt{2\pi\sigma^2}}e^{\frac{-(x-\mu)^2}{2\sigma^2}}$$. You will need to use Bayes’ theorem.
+
+For this question, we have to plugin the normal density into Bayes' theorem, prior probability for 'yes' is given, and next do math as shown in the code below:
+
+Based on pdf and Bayes theorem, we have:
+
+$$p_k(X) = \frac{\pi_k \frac{1}{\sqrt{2\pi}\sigma} exp \bigg( {-\frac{1}{2\sigma^2}(x - \mu_k)^2} \bigg)}
+{\sum _{l=1}^{k}\pi_l\frac{1}{\sqrt{2\pi}\sigma} exp \bigg( {-\frac{1}{2\sigma^2}(x - \mu_l)^2} \bigg)}$$
+
+If we just plug in the values for:
+
+$$\pi _{YES} = 0.8, \pi _{NO} = 0.2, \mu _{YES} = 10, \mu _{N0} = 0, \widehat{\sigma^2} = 36$$
+
+We have,
+
+$$f _{YES}(4) = 0.04033, \ f _{NO}(4) = 0.05324$$
+
+and if we use this value to caluclate the probablity that a company will issue
+a dividend, we get (0.752%):
+
+$$pYES(4) = \frac{0.8 \times 0.04033}{0.8 \times 0.04033 + 0.2 \times 0.05324} = 0.75186$$
+
+The same can be done in R to get the result:
+
+```{r, eval = TRUE}
+# pdf function
+pdf <- function(x, mu_k, sigma){((sqrt(2*pi)*sigma)^-1)*(exp(-((2*sigma^2)^-1)*(x-mu_k)^2))}
+
+sigma <- 6 # for both classes
+
+# Type 1 where companies issued dividend
+pi_1 <- .8
+mu_1 <- 10
+
+# Type 2 where companies  did not issue dividend
+pi_2 <- .2
+mu_2 <- 0
+
+# Calculate probabilities based on Bayes
+x <- 4
+p_1 <- (pi_1*pdf(4,mu_1,sigma))/(pi_1*pdf(4,mu_1,sigma) + pi_2*pdf(4,mu_2,sigma))
+p_2 <- (pi_2*pdf(4,mu_2,sigma))/(pi_1*pdf(4,mu_1,sigma) + pi_2*pdf(4,mu_2,sigma))
+
+# rounding the numbers
+p_1 <- round(p_1,4)
+p_2 <- round(p_2,4)
+
+# prediction
+prediction <- data.frame(cbind(c("Dividend", "Non-Dividend"), c(p_1, p_2)))
+colnames(prediction) <- c("Types", "prediction")
+prediction
+
+```
+
+Based on this analysis, 75.19 percent of the companies will issue dividend this year and 24.81% of the companies will not.
+    
+Now, we will fit a model using the predictors (chosen previously in this exercise) for classification using the `MclustDA` function from the `mclust-package`. We will first get the summary of our model. We will also find the best model selected by BIC and report the Model Name and the BIC. (See https://www.rdocumentation.org/packages/mclust/versions/5.4/topics/mclustModelNames)
+
+We will also report on the training error, test error, and true positive and true negative rates.
+        
+        
+```{r}
+
+library(ISLR)
+library(mclust)
+data(Weekly)
+cat("Omitting the `Today` variable")
+wk=Weekly[,-8]
+index=c(which(Weekly$Year==2009), which(Weekly$Year==2010))
+train=wk[-index,]
+test=wk[index,]
+
+cat("Just with lag 2")
+X=as.data.frame(train[,3]) ## keeping only Lag2
+class=train$Direction
+
+cat("MclustDA")
+mod1 = MclustDA(X, class)
+summary(mod1)
+
+cat("train error")
+predstrain=predict(mod1, newdata=train[,3])$classification
+###################################################################
+cat("function to get overall accuracy, TPR and TNR")
+overall_accuracy_TPR_TNR=function(con){
+  OA=round(100*(con[1,1]+con[2,2])/sum(con),2) ## error rate is 100-OA
+  TPR=round(con[2,2]/(con[2,2]+con[1,2])*100,2)
+  TNR=round(con[1,1]/(con[1,1]+con[2,1])*100,2) ## FPR=100-TNR
+  return(list(overall_accuracy = OA,True_positive_rate = TPR,True_negative_rate = TNR))
+}
+###################################################################
+
+overall_accuracy_TPR_TNR(table(predstrain,class))
+
+cat("test error")
+predstest=predict(mod1, newdata=test[,3])$classification
+trueClass=test[,8]
+overall_accuracy_TPR_TNR(table(predstest,trueClass))
+
+
+cat("With all the variables")
+X=as.data.frame(train[,-8]) ## keeping only Lag2
+mod11 = MclustDA(X, class)
+summary(mod11)
+predstrain=predict(mod11, newdata=train[,-8])$classification
+overall_accuracy_TPR_TNR(table(predstrain,class))
+predstest=predict(mod11, newdata=test[,-8])$classification
+trueClass=test[,8]
+overall_accuracy_TPR_TNR(table(predstest,trueClass))
+```        
+
+As we wanted to test, I fitted a model with the `MclustDA` function. The dataset was partitioned into training and testing sets using the same criterion as before:
+ 
+Two models were fitted. One with just the variable `Lag2`, and in the other one, `all` the variables were used. As we can see from the above table, in the univariate case (with lag2 variable), the best model was a two-component model in each class, having variable variance. 
+
+Now, we will specify `modelType="EDDA"` and run `MclustDA` again. We will get a summary of our model to report on the best model selected by BIC, training and test error, and the true positive and true Negative rates.
+
+```{r}
+cat("EDDA type")
+X=as.data.frame(train[,-8]) ## keeping only Lag2
+mod2=MclustDA(X, class, modelType = "EDDA")
+summary(mod2)
+## train error
+predstrain=predict(mod2, newdata=train[,-8])$classification
+overall_accuracy_TPR_TNR(table(predstrain,class))
+## test error
+predstest=predict(mod2, newdata=test[,-8])$classification
+trueClass=test[,8]
+overall_accuracy_TPR_TNR(table(predstest,trueClass))
+```
+
+With the `modelType=”EDDA”`, a model was fitted using `all` the variables (which in our case did not converge with only one variable).
+
+From the documentation of `mclust`, it was found that specifying `“EDDA”` as the model type, we force the model to have a single component in each class with same covariance structure. We see that the single component had ellipsoidal, equal orientation (VVE) structure.
+
+Next, we will use the ${\textbf{Auto}}$ dataset. Fit a classification model (using the predictors chosen for previously) using the `MclustDA` function from the `mclust-package`. Then, use the same training and test sets to get a summary of our model. We will find the best model selected by BIC and report the model name and BIC, the training and test errors, and the true positive and the true negative rates.
+
+```{r}
+library(ISLR)
+data(Auto)
+mpg01=rep(NA,dim(Auto)[1])
+med=median(Auto$mpg)
+mpg01=ifelse(Auto$mpg<med,0,1)
+df=as.data.frame(cbind(Auto, mpg01))
+
+newdf=df[,c(2,3,4,5,6,7,8,10)] ## mpg and names dropped
+lowmpg=subset(newdf,mpg01==0)
+highmpg=subset(newdf,mpg01==1)
+set.seed(1235)
+index1=sample((1:dim(lowmpg)[1]),size=round(0.5*dim(lowmpg)[1]),replace=F)
+set.seed(54321)
+index2=sample((1:dim(highmpg)[1]),size=round(0.5*dim(highmpg)[1]),replace=F)
+train1=lowmpg[index1,];   train2=highmpg[index2,]
+test1=lowmpg[-index1,];   test2=highmpg[-index2,]
+autotrain=rbind(train1,train2)
+autotest=rbind(test1,test2)
+
+autotrainX=autotrain[,-8]
+autotrainClass=autotrain[,8]
+autotestX=autotest[,-8]
+autotestClass=autotest[,8]
+
+auto_mclust_DA=MclustDA(autotrainX, autotrainClass)
+summary(auto_mclust_DA)
+autopredstrain=predict(auto_mclust_DA,newdata=autotrainX)$classification
+## train summaries
+overall_accuracy_TPR_TNR(table(autopredstrain, autotrainClass)) ##94.9, 94.9, 94.9
+## test summaries
+autopredstest=predict(auto_mclust_DA,newdata=autotestX)$classification
+overall_accuracy_TPR_TNR(table(autopredstest, autotestClass)) ## 88.27, 84.69, 91.84
+```
+
+Using the same training and testing dataset as before, `MclustDA` was performed in the Auto data. The response was the binary coded MPG (whether greater or equal to median mpg). Same predictors as previous were used as previous. 
+
+As we can see from the table above, the best model picked up by the BIC was a 5-component mixture in both classes, having the similar covariance structure diagonal, equal volume and shape (EEI).
+
+Now, we will specify `modelType="EDDA"` and run `MclustDA` again to report on the summary of our model, the best model selected by BIC, training and test error rates, and the true Positive and true Negative rates.
+        
+```{r}
+
+autoDA2=MclustDA(autotrainX, autotrainClass, modelType = "EDDA")
+summary(autoDA2)
+autopredstrain=predict(autoDA2,newdata=autotrainX)$classification
+cat("## train summaries")
+overall_accuracy_TPR_TNR(table(autopredstrain, autotrainClass)) ##92.86, 94.9, 90.82
+cat("## test summaries")
+autopredstest=predict(autoDA2,newdata=autotestX)$classification
+overall_accuracy_TPR_TNR(table(autopredstest, autotestClass)) ## 89.29, 88.78, 89.8
+```
+
+
+As expected, the best model was a 1 component mixture in each class having the same covariance structure. The covariance structure was single component had ellipsoidal, equal orientation (VVE). 
+
+Next, we will choose a dataset from [this website](http://archive.ics.uci.edu/ml) and do some initial exploration of the dataset. We will report the analysis and dicuss the challenges with analyzing the data. ${\textit{We will strictly use ggplot for this}}$
+
+For this exercise, we are going to use [this data:](https://archive.ics.uci.edu/ml/datasets/adult).
+
+
+Attribute Information:
+
+Listing of attributes:
+
+$>50K, <=50K$
+
+age: continuous.
+workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked.
+fnlwgt: continuous.
+education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+education-num: continuous.
+marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse.
+occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
+relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
+sex: Female, Male.
+capital-gain: continuous.
+capital-loss: continuous.
+hours-per-week: continuous.
+native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US(Guam-USVI-etc), India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico, Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala, Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holand-Netherlands.
+
+
+```{r}
+# https://archive.ics.uci.edu/ml/machine-learning-databases/adult/
+set.seed(123)
+library(rpart)
+# install.packages("MLmetrics")
+library(MLmetrics)
+library(caTools)
+library(e1071)
+# install.packages("rpart.plot")
+library(rpart.plot)
+library(ggplot2)
+library(Hmisc)
+# install.packages("usdm")
+library(usdm)
+
+##Load Data##
+df <- read.csv("https://raw.githubusercontent.com/achalneupane/data/refs/heads/master/adult.data", header = T)
+#Rename features for simplicity
+colnames(df) <- c("Age", "Work_Class", "Sampling_Weight", "Highest_Education", "Education_Num", 
+                  "Martial_Status", "Occupation", "Relationship", "Race", "Sex", "Cap_Gain", "Cap_Loss",
+                  "Hours_Per_Week", "Native_Country", "Income")
+
+
+
+cat("Data exploration")
+cat("is.na Age?")
+sum(is.na(df$Age)) #none
+
+cat ("Summary of Age of adult population")
+summary(df$Age)
+hist(df$Age)
+```
+             
+This data is skewed slightly right, 75% of adults in the dataset are younger than 48yrs old 50% of adults in data set lie between 28yrs old and 48yrs old age data has a range of 73 years
+
+```{r}  
+cat("Types or Work Class")
+str(df$Work_Class)
+summary(df$Work_Class)
+
+ggplot(data = df) +
+  geom_bar(mapping = aes(x = df$Work_Class), col = "blue", fill = "blue")+
+  coord_flip() + 
+  labs(x = "Work Class")
+
+# Never-worked: 7
+# Without-pay: 14
+# Might be able to leave those 21 datapoints out
+# Most people work for private corporations, followed by self employed (not incorporated), then
+# local government, then unknown, then state government, then self employed (incorporated), then
+# federal gov, and lastly by without pay and never worked
+#
+
+cat("Race")
+summary(df$Race)
+
+ggplot(data = df) +
+  geom_bar(mapping = aes(x = df$Race), col = "blue", fill = "blue") +
+  coord_flip() + 
+  labs(x = "Race")
+
+ggplot(df, aes(x = df$Race)) +  
+  geom_bar(aes(y = (..count..)/sum(..count..)), col = "blue", fill = "blue") +
+  coord_flip() + 
+  labs(x = "Race", y = "Percent")
+
+cat("# White: ~85.43%")
+27816/32561
+
+cat("# Black: ~9.6% ")
+3124/32561
+
+cat("# American-Indian-Eskimo: ~0.96%")
+311/32561
+
+cat("# Asian-Pacific-Island: ~3.2%")
+1039/32561
+
+cat("# Other: ~0.8%")
+271/32561
+
+# Later generator: https://www.tablesgenerator.com/latex_tables
+```
+
+This data looks accurate representative of the US population (using 2010 Census data):
+
+
+\begin{table}[]
+\centering
+\caption{2010 Census data}
+\label{tab:my-table}
+\begin{tabular}{|l|l|}
+\hline
+White 2010 Census                        & $\sim$72.4\% \\ \hline
+Black 2010 Census                        & $\sim$12.6\% \\ \hline
+Asian 2010 Census                        & $\sim$4.8\%  \\ \hline
+Native American/Alaskan Natives          & $\sim$0.9\%  \\ \hline
+Native Hawaiians/Other Pacific Islanders & $\sim$0.2\%  \\ \hline
+Two or More races                        & $\sim$2.9\%  \\ \hline
+Some other race                          & $\sim$6.2\%  \\ \hline
+\end{tabular}
+\end{table}
+
+```{r}
+cat("Sex")
+summary(df$Sex)
+ggplot(data = df) +
+  geom_bar(mapping = aes(x = df$Sex))
+
+ggplot(df, aes(x = df$Sex)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)))
+
+#female: ~33.1%
+10771/32561
+#male: ~66.9%
+21790/32561
+```
+
+The data is disproportionately male. According to the Bureau of Labor Statistics, the workforce is 47% female and 53% male.
+
+```{r}
+## Hours
+summary(df$Hours_Per_Week)
+ggplot() +
+  geom_histogram(mapping = aes(x = df$Hours_Per_Week), data = df, stat = "bin",
+                 binwidth = 10, bins = 6
+  )
+
+```
+
+Worker's Native Country information:
+
+```{r}
+
+summary(df$Native_Country)
+country_count <- data.frame(Name = df$Native_Country)
+summary(country_count)
+
+cat("Top three countries by frequency:")
+#   USA     :      29170 (~89.6%)
+#   Mexico  :        643 (`2.00%)
+#   Unknown :        582 (~1.8%)
+#   Other   :       2165 (~6.65%)
+
+cat("Summary of data USING DESCRIB(), HEAD(), SUMMARY(), AND STR()")
+head(df)
+str(df)
+summary(df)
+#describe(df)
+
+cat("#It shows that 24.1% of adults make more than 50K USD")
+
+cat("Most people (75%) make less than or equal to 50K USD annually")
+
+cat("Let's look at the relationships between the variables")
+cat(" Totals individuals making more than 50K")
+sum(df$Income==" >50K") #7841
+
+cat("Total White:")
+sum(df$Race==" White") #27816
+
+cat("Total White making more than 50K")
+sum(df$Income==" >50K" & df$Race==" White") #7117
+cat("Total Non-White making more than 50K")
+sum(df$Income==" >50K" & df$Race!=" White") #724
+
+cat("Total White making less than 50K")
+sum(df$Income==" <=50K" & df$Race==" White") #20699
+
+cat ("Percent of adults making more than 50K and are White:")
+sum(df$Income==" >50K" & df$Race==" White")/sum(df$Income==" >50K") *100
+
+cat ("Percent of White adults making more than 50K:")
+sum(df$Income==" >50K" & df$Race==" White")/sum(df$Race==" White") *100
+```
+
+White adults make up 90.77% of adults making more than 50K USD Non-white adults make up 9.23% of adults making more than 50K USD 25.6% of White adults make more than 50K USD
+
+We can repeat the same analysis for Black population:
+
+```{r}
+cat("Race -- Black")
+
+cat("Total black individuals")
+sum(df$Race==" Black") #3124
+cat("Totals individuals making more than 50K")
+sum(df$Income==" >50K" & df$Race==" Black") #387
+cat("Total Non-Black making more than 50K")
+sum(df$Income==" >50K" & df$Race!=" Black") #7454
+cat("Total Black making less than 50K")
+sum(df$Income==" <=50K" & df$Race==" Black") #2737
+
+cat ("percent of adults making more than 50K and are Black:")
+sum(df$Income==" >50K" & df$Race==" Black")/sum(df$Income==" >50K") *100
+
+cat ("percent of blacks adults making more than 50K:")
+sum(df$Income==" >50K" & df$Race==" Black")/sum(df$Race==" Black") *100
+```
+
+Black adults make up 4.935% of adults making more than 50K USD; 12.38% of Black adults make more than 50K USD
+
+We repeat the same analysis for American Indian:
+
+```{r}
+cat("Total Race -- Amer-Indian-Eskimo")
+sum(df$Race==" Amer-Indian-Eskimo") #311
+cat("Amer-Indian-Eskimo making more than 50K: ")
+sum(df$Income==" >50K" & df$Race==" Amer-Indian-Eskimo") #36
+cat("Total non-Amer-Indian-Eskimo making more than 50K: ")
+sum(df$Income==" >50K" & df$Race!=" Amer-Indian-Eskimo") #7805
+
+cat("Amer-Indian-Eskimo making less than 50K: ")
+sum(df$Income==" <=50K" & df$Race==" Amer-Indian-Eskimo") #275
+
+cat ("percent of adults making more than 50K and are Amer-Indian-Eskimo:")
+sum(df$Income==" >50K" & df$Race==" Amer-Indian-Eskimo")/sum(df$Income==" >50K") *100
+
+cat ("percent of Amer-Indian-Eskimo adults making more than 50K:")
+sum(df$Income==" >50K" & df$Race==" Amer-Indian-Eskimo")/sum(df$Race==" Amer-Indian-Eskimo") *100
+```
+
+Amer-Indian-Eskimo adults make up 0.5% of adults making more than 50K USD
+11.6% of Amer-Indian-Eskimo adults make more than 50K USD
+
+We can repeat this analysis for Asian-Pac-Islander
+
+```{r}
+cat("Race -- Asian-Pac-Islander")
+cat("Total Race -- Asian-Pac-Islander")
+sum(df$Race==" Asian-Pac-Islander") #1039
+cat("Asian-Pac-Islander making more than 50K: ")
+sum(df$Income==" >50K" & df$Race==" Asian-Pac-Islander") #276
+cat("Total non-Asian-Pac-Islander making more than 50K: ")
+sum(df$Income==" >50K" & df$Race!=" Asian-Pac-Islander") #7565
+cat("Asian-Pac-Islander making less than 50K: ")
+sum(df$Income==" <=50K" & df$Race==" Asian-Pac-Islander") #763
+
+cat ("percent of adults making more than 50K and are Asian-Pac-Islander:")
+sum(df$Income==" >50K" & df$Race==" Asian-Pac-Islander")/sum(df$Income==" >50K") *100
+
+cat ("percent of Asian-Pac-Islander adults making more than 50K:")
+sum(df$Income==" >50K" & df$Race==" Asian-Pac-Islander")/sum(df$Race==" Asian-Pac-Islander") *100
+```
+
+Asian-Pac-Islander adults make up 3.5% of adults making more than 50K USD 26.56% of Asian-Pac-Islander adults make more than 50K USD
+
+We can repeat this for all other race:
+
+```{r}
+cat("Race -- Other")
+cat("Total Race -- Other")
+sum(df$Race==" Other") #271
+cat("Other-race making more than 50K: ")
+sum(df$Income==" >50K" & df$Race==" Other") #25
+cat("Non-Other-race making more than 50K: ")
+sum(df$Income==" >50K" & df$Race!=" Other") #7816
+cat("Other-race making less than 50K: ")
+sum(df$Income==" <=50K" & df$Race==" Other") #246
+
+cat ("percent of adults making more than 50K and are Other-race:")
+sum(df$Income==" >50K" & df$Race==" Other")/sum(df$Income==" >50K") *100
+
+cat ("percent of Other-race adults making more than 50K:")
+sum(df$Income==" >50K" & df$Race==" Other")/sum(df$Race==" Other") *100
+```
+
+Adults of Other race make up 0.03% of adults making more than 50K USD. 9.22% of Other adults make more than 50K USD.
+
+Now we can also compare other variables like Gender
+
+```{r}
+#Sex -- Male
+sum(df$Sex==" Male") #21790
+sum(df$Sex==" Male" & df$Income==" >50K") #6662
+sum(df$Sex==" Male" & df$Income!=" >50K") #15128
+cat("30.6% of Male adults make more than 50K USD annually; 85% of adults making more than 50K USD annually are Male")
+
+#Sex == Female
+sum(df$Sex==" Female") #10771
+sum(df$Sex==" Female" & df$Income==" >50K") #1179
+sum(df$Sex==" Female" & df$Income!=" >50K") #9592
+cat("11% of Female adults make more than 50K USD annually; 15% of adults making more than 50K USD annually are Female")
+
+#Sex -- Male AND Race -- White AND
+sum(df$Sex==" Female" & df$Race==" White" & df$Income ==" >50K") #1028
+sum(df$Sex==" Male" & df$Race==" White" & df$Income ==" >50K") #6089
+cat("13.11% of adults making more than 50K USD annually are White Females; 77.66% of adults making more than 50K USD annually are White Males; 85.6% of White adults making more than 50K USD annually are Males")
+
+sum(df$Sex==" Female" & df$Race==" Black" & df$Income ==" >50K") #90
+sum(df$Sex==" Male" & df$Race==" Black" & df$Income ==" >50K") #297
+cat ("1.15% of adults making more than 50K USD annually are Black Females; 3.79% of adults making more than 50K USD annually are Black Males; 76.75% of Black adults making more than 50K USD annually are Males")
+
+sum(df$Sex==" Female" & df$Race==" Asian-Pac-Islander" & df$Income ==" >50K") #43
+sum(df$Sex==" Male" & df$Race==" Asian-Pac-Islander" & df$Income ==" >50K") #233
+cat("0.5% of adults making more than 50K USD annually are Asian/Pacific Islander Females; 2.97% of adults making more than 50K USD annually are Asian/Pacific Islander Males; 84.42% of Asian adults making more than 50K USD annually are Male")
+
+sum(df$Sex==" Female" & df$Race==" Amer-Indian-Eskimo" & df$Income ==" >50K") #12
+sum(df$Sex==" Male" & df$Race==" Amer-Indian-Eskimo" & df$Income ==" >50K") #24
+cat("0.15% of adults making more than 50K USD annually are Female American-Indian/Eskimo; 0.30% of adults making more than 50K USD annually are Male American-Indian/Eskimo; 92.31% of American-Indian/Eskimo adults making more than 50K USD annually are Male")
+
+
+# Workclass -- Private
+sum(df$Income==" >50K" & df$Work_Class==" Private") #4963
+cat("63.29% of adults making more than 50K USD annually are in the private workclass")
+
+# Workclass -- State-gov
+sum(df$Income==" >50K" & df$Work_Class==" State-gov") #353
+cat("4.5% of adults making more than 50K USD annually work for the state government")
+
+# Workclass -- Self-emp-not-inc
+sum(df$Income==" >50K" & df$Work_Class==" Self-emp-not-inc") #724
+cat("9.23% of adults making more than 50K USD annually are self-employed (not incorporated")
+
+# Workclass -- Self-emp-inc
+sum(df$Income==" >50K" & df$Work_Class==" Self-emp-inc") #622
+cat("8% of adults making more than 50K USD annually are self-employed (incorporated)")
+
+# Workclass -- Federal
+sum(df$Income==" >50K" & df$Work_Class==" Federal-gov") #371
+cat("4.73% of adults making more than 50K USD annually work for the federal government")
+
+# Workclass -- ?
+sum(df$Income==" >50K" & df$Work_Class==" ?") #191
+cat("2.44% of adults making more than 50K USD annually work in unknown workclasses")
+
+cat("#QUICK RECAP USING XTABS()")
+cat("# two-way contingency tables using Income and Workclass")
+xtabs( ~df$Income + df$Work_Class, data = df)
+cat("More self-employed-inc adults make greater than 50K USD, than those that do not")
+
+cat("# two-way contigency table using Income and Sex")
+xtabs( ~df$Income + df$Sex, data = df)
+cat("More Males make greater than 50K USD than Females")
+
+xtabs( ~df$Income + df$Highest_Education, data = df)
+```
+
+Adults with higher levels of education correspond with more making greater than 50K USD annually.
+
+Next, we will clean and separate the data: separate the response variable from the explanatory variables. We will then split our data into test and training datasets for Recursive Partitioning and Regression Trees.
+
+```{r}
+# Factor as numeric
+df_clean <- df
+df_clean_numeric <- df
+
+# First, we will convert character variables as factor
+for (i in 1:15) {
+  if(class(df_clean_numeric[,i])=="character"){
+    df_clean_numeric[,i] <- as.factor(df_clean_numeric[,i])
+  }
+}
+
+#Then converting variables to numerics
+for (i in 1:15) {
+  if(class(df_clean_numeric[,i])=="factor"){
+    df_clean_numeric[,i] <- as.numeric(df_clean_numeric[,i])
+  }
+}
+
+#encoding the target feature as factor of 0 or 1
+df_clean_numeric$Income <- df_clean_numeric$Income - 1
+
+# df_clean_numeric$Income <- as.numeric(as.factor(df_clean_numeric$Income))-1
+
+split = sample.split(df_clean$Income, SplitRatio = 0.75)
+train_set <- subset(df_clean, split == TRUE)
+test_set <- subset(df_clean, split == FALSE)
+
+split = sample.split(df_clean_numeric$Income, SplitRatio = 0.75)
+train_numeric <- subset(df_clean_numeric, split == TRUE)
+test_numeric <- subset(df_clean_numeric, split == FALSE)
+
+y <- as.integer(train_numeric$Income)
+
+cat("Model Building")
+cat("Outlier detection by quantile analysis")
+sapply(train_numeric[,], function(x) quantile(x, c(.01,.05,.25,.5,.75,.90,.95, .99, 1),na.rm=TRUE) )
+cat("We see no significant effect from outliers")
+
+cat("Missing value detection")
+sapply(train_set, function(x) sum(is.na(x)) )
+cat("No NA values")
+
+cat("correlation and VIF")
+correlation_table <- cor(train_numeric[,1:14])
+correlation_table2 <- cor(train_numeric[,1:15])
+correlation_table <- (correlation_table*100)
+correlation_tableDF <- as.data.frame(correlation_table)
+correlation_tableDFLogical <- correlation_tableDF > 5 | correlation_tableDF < -5
+
+cat("Correlation table:")
+correlation_tableDF
+cat("Variables that are most strongly correlated with income: sex, education num, age, hours per week, cap gain, cap loss")
+
+cat("VIF")
+
+vifDF <- as.data.frame(vif(train_numeric[,1:14]))
+vifDF
+
+cat("Highest variance-inflation factors:")
+cat("Relationship: 1.720860")
+cat("Sex:          1.552166")
+cat("Education_Num: 1.250295")
+
+test_set$Income <- (test_set$Income==" >50K")
+test_set$Income <- as.integer(test_set$Income)
+
+regressor1 <- rpart(formula = Income ~ Age + Work_Class + Highest_Education +
+                      Education_Num + Martial_Status + Occupation + Relationship +
+                      Race + Sex + Cap_Gain + Cap_Loss + Hours_Per_Week + Native_Country,
+                    data = train_set,
+                    control = rpart.control(minsplit = 10))
+
+summary(regressor1)
+
+y_pred <- predict(regressor1, test_set)
+y_pred <- round(y_pred)
+
+predictions <- as.data.frame(y_pred)
+predictions$` <=50K`<- NULL
+
+library(caret)
+confusionMatrix(factor(test_set$Income), factor(predictions$` >50K`))
+
+cat("Second attempt at improving the model with feature selection")
+regressor1 <- rpart(formula = Income ~ Age + Work_Class +
+                      Education_Num + Relationship +
+                      Race + Sex + Cap_Gain + Cap_Loss + Hours_Per_Week,
+                    data = train_set,
+                    control = rpart.control(minsplit = 10))
+
+summary(regressor1)
+y_pred <- predict(regressor1, test_set)
+y_pred <- round(y_pred)
+
+predictions <- as.data.frame(y_pred)
+predictions$` <=50K`<- NULL
+
+confusionMatrix(factor(test_set$Income), factor(predictions$` >50K`))
+
+cat("Slight decrease in precision, slight increase in recall, and slight increase in accuracy; this model is roughly the same in performance as the first model")
+
+cat ("We can also calculate F1 score to measure test accuracy:")
+F1_Score(test_set$Income, predictions$` >50K`)
+#F1 score of .9037
+
+```
+
+I think this data has lots of information for analysis which could be a bit overwhelming. After performing some model fitting on this data, the corrected model seems to have slight decrease in precision, slight increase in recall, and slight increase in accuracy. The corrected model is roughly the same in performance as the first model.
+
+Following is a table of several exponential-family distributions in common use and the data they are typically used for, along with the canonical link functions and their inverses (sometimes referred to as the mean function, as done here):
+
+<table><caption>Common distributions with typical uses and canonical link functions</caption><tbody><tr><th>Distribution</th><th>Support of distribution</th><th>Typical uses</th><th>Link name</th><th>Link function, <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/5e2ebd12256b9e1b8dcdfdd4bd625f37df639ded" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=g(\mu )\,\!}"></span></th><th>Mean function</th></tr><tr><td><a title="Normal distribution">Normal</a></td><td>real: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/e577bfa9ed1c0f83ed643206abae3cd2f234cf9c" aria-hidden="true" alt="(-\infty ,+\infty )"></span></td><td>Linear-response data</td><td>Identity</td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/63238c06f9c1927aee60b40fec3adccd419cf32a" aria-hidden="true" alt="\mathbf {X} {\boldsymbol {\beta }}=\mu \,\!"></span></td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/12c514082234f52d09595635789f474de0279b7d" aria-hidden="true" alt="\mu =\mathbf {X} {\boldsymbol {\beta }}\,\!"></span></td></tr><tr><td><a title="Exponential distribution">Exponential</a></td><td rowspan="2">real: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/de77e40eb7e2582eef8a5a1da1bc027b7d9a8d6e" aria-hidden="true" alt="(0,+\infty )"></span></td><td rowspan="2">Exponential-response data, scale parameters</td><td rowspan="2"><a title="Multiplicative inverse">Negative inverse</a></td><td rowspan="2"><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/f6532ae0a7d9f63020f9a3e4175c391fb1130f99" aria-hidden="true" alt="\mathbf {X} {\boldsymbol {\beta }}=-\mu ^{-1}\,\!"></span></td><td rowspan="2"><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/11209fa27eda9b964da5691b83fd3652d59ddcc0" aria-hidden="true" alt="\mu =-(\mathbf {X} {\boldsymbol {\beta }})^{-1}\,\!"></span></td></tr><tr><td><a title="Gamma distribution">Gamma</a></td></tr><tr><td><a title="Inverse Gaussian distribution">Inverse<br>Gaussian</a></td><td>real: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/de77e40eb7e2582eef8a5a1da1bc027b7d9a8d6e" aria-hidden="true" alt="(0,+\infty )"></span></td><td></td><td>Inverse<br>squared</td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/0a3b87590326202b24e85ce5762989fd34bff8c2" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=\mu ^{-2}\,\!}"></span></td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/9f2b2781a377e3d9ed78c1b1e026fda1e8895402" aria-hidden="true" alt="{\displaystyle \mu =(\mathbf {X} {\boldsymbol {\beta }})^{-1/2}\,\!}"></span></td></tr><tr><td><a title="Poisson distribution">Poisson</a></td><td>integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/b1da8ed7e74b31b6314f23f122a1198c104fcaad" aria-hidden="true" alt="0,1,2,\ldots "></span></td><td>count of occurrences in fixed amount of time/space</td><td><a title="Natural logarithm">Log</a></td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/245ed014e9dd7f9624171201d1a4daecb1c20997" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=\ln(\mu )\,\!}"></span></td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/7fac36b3451b711d49417813988a6e8bb4db5719" aria-hidden="true" alt="{\displaystyle \mu =\exp(\mathbf {X} {\boldsymbol {\beta }})\,\!}"></span></td></tr><tr><td><a title="Bernoulli distribution">Bernoulli</a></td><td>integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/28de5781698336d21c9c560fb1cbb3fb406923eb" aria-hidden="true" alt="\{0,1\}"></span></td><td>outcome of single yes/no occurrence</td><td rowspan="5"><a title="Logit">Logit</a></td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/8756b6c8f78882b05820c4058a861002462ef4b4" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=\ln \left({\frac {\mu }{1-\mu }}\right)\,\!}"></span></td><td rowspan="5"><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/b739082e7ee418a2163685f976c75b4906910158" aria-hidden="true" alt="{\displaystyle \mu ={\frac {\exp(\mathbf {X} {\boldsymbol {\beta }})}{1+\exp(\mathbf {X} {\boldsymbol {\beta }})}}={\frac {1}{1+\exp(-\mathbf {X} {\boldsymbol {\beta }})}}\,\!}"></span></td></tr><tr><td><a title="Binomial distribution">Binomial</a></td><td>integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/4f0dabd0eecff746a5377991354a67ea28a4e684" aria-hidden="true" alt="0,1,\ldots ,N"></span></td><td>count of # of "yes" occurrences out of N yes/no occurrences</td><td><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/ecbce4c90689853e5656461e1165f5473d276a44" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=\ln \left({\frac {\mu }{n-\mu }}\right)\,\!}"></span></td></tr><tr><td rowspan="2"><a title="Categorical distribution">Categorical</a></td><td>integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/aa074207d3bea2e879410172ce89ba2435d37d11" aria-hidden="true" alt="[0,K)"></span></td><td rowspan="2">outcome of single K-way occurrence</td><td rowspan="3"><span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/8756b6c8f78882b05820c4058a861002462ef4b4" aria-hidden="true" alt="{\displaystyle \mathbf {X} {\boldsymbol {\beta }}=\ln \left({\frac {\mu }{1-\mu }}\right)\,\!}"></span></td></tr><tr><td>K-vector of integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/738f7d23bb2d9642bab520020873cccbef49768d" aria-hidden="true" alt="[0,1]"></span>, where exactly one element in the vector has the value 1</td></tr><tr><td><a title="Multinomial distribution">Multinomial</a></td><td><i>K</i>-vector of integer: <span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/703d57dca548a7f9d927247c2a27b67666aebdd5" aria-hidden="true" alt="[0,N]"></span></td><td>count of occurrences of different types (1 .. <i>K</i>) out of <i>N</i> total <i>K</i>-way occurrences</td></tr></tbody></table>
+
+
+In the cases of the exponential and gamma distributions, the domain of the canonical link function is not the same as the permitted range of the mean. In particular, the linear predictor may be positive, which would give an impossible negative mean. When maximizing the likelihood, precautions must be taken to avoid this. An alternative is to use a noncanonical link function.
+
+In the case of the Bernoulli, binomial, categorical and multinomial distributions, the support of the distributions is not the same type of data as the parameter being predicted. In all of these cases, the predicted parameter is one or more probabilities, i.e. real numbers in the range ${\displaystyle [0,1]}$. The resulting model is known as logistic regression (or multinomial logistic regression in the case that K-way rather than binary values are being predicted).
+
+For the Bernoulli and binomial distributions, the parameter is a single probability, indicating the likelihood of occurrence of a single event. The Bernoulli still satisfies the basic condition of the generalized linear model in that, even though a single outcome will always be either 0 or 1, the expected value will nonetheless be a real-valued probability, i.e. the probability of occurrence of a "yes" (or 1) outcome. Similarly, in a binomial distribution, the expected value is Np, i.e. the expected proportion of "yes" outcomes will be the probability to be predicted.
+
+For categorical and multinomial distributions, the parameter to be predicted is a K-vector of probabilities, with the further restriction that all probabilities must add up to 1. Each probability indicates the likelihood of occurrence of one of the K possible values. For the multinomial distribution, and for the vector form of the categorical distribution, the expected values of the elements of the vector can be related to the predicted probabilities similarly to the binomial and Bernoulli distributions.

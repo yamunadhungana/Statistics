@@ -1,0 +1,851 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Logistic Regression"
+date: 2023-09-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+summary: Statistics series
+---
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+
+In statistics, the logistic model (or logit model) is used to model the probability of a certain class or event existing such as pass/fail, win/lose, alive/dead or healthy/sick. This can be extended to model several classes of events such as determining whether an image contains a cat, dog, lion, etc. Each object being detected in the image would be assigned a probability between 0 and 1, with a sum of one.
+
+Logistic regression is a statistical model that in its basic form uses a logistic function to model a binary dependent variable, although many more complex extensions exist. In regression analysis, logistic regression is estimating the parameters of a logistic model (a form of binary regression). Mathematically, a binary logistic model has a dependent variable with two possible values, such as pass/fail which is represented by an indicator variable, where the two values are labeled "0" and "1". In the logistic model, the log-odds (the logarithm of the odds) for the value labeled "1" is a linear combination of one or more independent variables ("predictors"); the independent variables can each be a binary variable (two classes, coded by an indicator variable) or a continuous variable (any real value). The corresponding probability of the value labeled "1" can vary between 0 (certainly the value "0") and 1 (certainly the value "1"), hence the labeling; the function that converts log-odds to probability is the logistic function, hence the name. The unit of measurement for the log-odds scale is called a logit, from logistic unit, hence the alternative names. Analogous models with a different sigmoid function instead of the logistic function can also be used, such as the probit model; the defining characteristic of the logistic model is that increasing one of the independent variables multiplicatively scales the odds of the given outcome at a constant rate, with each independent variable having its own parameter; for a binary dependent variable this generalizes the odds ratio.
+
+In a binary logistic regression model, the dependent variable has two levels (categorical). Outputs with more than two values are modeled by multinomial logistic regression and, if the multiple categories are ordered, by ordinal logistic regression (for example the proportional odds ordinal logistic model). The logistic regression model itself simply models probability of output in terms of input and does not perform statistical classification (it is not a classifier), though it can be used to make a classifier, for instance by choosing a cutoff value and classifying inputs with probability greater than the cutoff as one class, below the cutoff as the other; this is a common way to make a binary classifier. 
+
+More from this wiki article: https://en.wikipedia.org/wiki/Logistic_regression.
+
+
+In this tutorial, we will start off with the analysis of $\textbf{plasma}$ dataset. 
+
+We will first fit a quadratic regression model, i.e., a model of the form
+$$\text{Model 2:   } velocity = \beta_1 \times distance + \beta_2 \times distance^2 +\epsilon$$
+
+```{r}
+library(gamair)
+library(knitr)
+library(ggplot2)
+library(rsq)
+data(hubble)
+library(HSAUR3)
+
+model2 <- lm(y~x + I(x^2) -1, data = hubble)
+# summary(model2)
+knitr::kable(summary(model2)$coefficients, caption = "Summary of the model2")
+```
+   
+Then we will plot the fitted curve from Model 2 on the scatterplot of the data.
+    
+```{r}
+# fitted curve
+# index  <- seq(0, 22, 0.1)
+index <- seq(min(hubble$x),max(hubble$x),0.1)
+index2 <- index^2
+# predicted <- predict(model2,list(x = index, x2=index2))
+predicted <- model2$fitted.values
+#create a data frame of x nd y values for plotting for ggplot
+data <- as.data.frame(cbind(x = hubble$x,predicted))
+# Scatter Plot
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(y~x, data = hubble, main = "base R: Scatter plot with fitted curve from Model2", xlab = "Distance", ylab = "Velocity")
+lines(data$x[order(data$x)], data$predicted[order(data$predicted)], col = "green")
+
+ggplot(data = model2, aes(x = model2$model$x, y = model2$model$y)) +
+  geom_point() +
+  geom_line(aes(x = model2$model$x, y = model2$fitted.values), colour = "green") +
+  labs(title = "ggplot: Scatter plot with fitted curve from Model2", x = "Distance", y = "velocity")
+
+```
+    
+Next, we will add the simple linear regression fit on this plot. We use different color and line type to differentiate the two and add a legend to our plot.
+    
+```{r}    
+# Simple lm
+hmod <- lm(y~x - 1 , data = hubble)
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(y~x, data = hubble, main = "base R: scatter plot for hubble data", xlab = "Distance", ylab = "Velocity")
+lines(data$x[order(data$x)], data$predicted[order(data$predicted)], col = "green")
+abline(hmod, lty=2, col=2)
+# Legend
+legend("bottomright", c("Quadratic", "Linear"), lty = 1:2, col = 2:1)
+
+
+## ggplot version
+ggplot(data = model2, aes(x = model2$model$x, y = model2$model$y)) +
+  geom_point() +
+  geom_line(aes(x = model2$model$x, y = model2$fitted.values, colour = "Quadratic")) +
+  geom_line(data = hmod, aes(x = hmod$model$x, y = hmod$fitted.values, colour = "Linear")) +
+  labs(title = "ggplot: Scatter plot with fitted curve from Model2", x = "Distance", y = "velocity", colour = "Models")
+```
+    
+Here, we will try to understand which model is the most sensible considering the nature of the data/ or by looking at the plot.
+
+The simple model seems more sensible to me.  The data points seem to follow a line from lower left to upper right of the plot without a clear curvature. However, strictly saying, there isn't much difference between the two models. The quadratic model here is still regarded as a `"linear regression"` model since the term `"linear"` relates to the parameters of the model and not to the powers of the explanatory variables.
+    
+```{r}
+summary(model2) # # Quadratic regression model
+mod.2 <- summary(model2)
+summary(hmod)  # Simple linear model
+hmod.1 <- summary(hmod) 
+cat ("Adjusted R-square")
+kable(cbind(Quadratic = mod.2$adj.r.squared, Linear = hmod.1$adj.r.squared), caption = "Adjusted R-square", row.names = FALSE )
+
+```
+
+The statistics appear to support the simple model as the better one. Since the Adjusted r-squared statistic is higher for the simple model (0.9394) Vs. Quadratic (0.9388554) which indicates that the simple model explains more of the variability in the response data than does the quadratic model. 
+
+The $\textbf{leuk}$ data from package $\textbf{MASS}$ shows the survival times
+from diagnosis of patients suffering from leukemia and the values of two
+explanatory variables, the white blood cell count (wbc) and the presence or
+absence of a morphological characteristic of the white blood cells (ag).
+
+Next, we will try to define a binary outcome variable according to whether or not patients lived for at least 24 weeks after diagnosis. We Call it $\textit{surv24}$.
+    
+```{r}
+#add a binary column named surv24 for time greater than or less than 24. 
+library(MASS)
+library(dplyr)
+q3_subset <- leuk %>%
+  mutate(surv24 = ifelse(time >= 24, 1,0))
+```
+
+We now fit a logistic regression model to the data with $\textit{surv24}$ as response. It is advisable to transform the very large white blood counts to avoid regression coefficients very close to 0 (and odds ratio close to 1). We may use log transformation in this case.
+
+```{r}
+surv24.model <- glm(surv24 ~ log(wbc) + ag, data=q3_subset,family = 'binomial')
+kable(summary(surv24.model)$coefficient, caption = "Summary coefficients of the glm")
+```
+
+Now constructing some graphics useful in the interpretation of the final model we just fit. We will create a scatter plot of the data fitting the two curves of test results to the fitted output of the model prediciton
+
+```{r}
+x.extension <- seq(0, max(log(q3_subset$wbc)+4.5), by = 0.5)
+espframe <- data.frame("x.extension" = x.extension, "agpress" = (exp(surv24.model$coefficients[1] +surv24.model$coefficients[2]*x.extension + surv24.model$coefficients[3])/(1+exp(surv24.model$coefficient[1] + surv24.model$coefficients[2]*x.extension + surv24.model$coefficients[3]))), "agabs" = exp(surv24.model$coefficients[1] +surv24.model$coefficients[2]*x.extension)/(1+exp(surv24.model$coefficient[1] + surv24.model$coefficients[2]*x.extension)))
+
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(x = log(leuk$wbc), y = surv24.model$fitted.values, col = leuk$ag, xlim = c(0,15), ylim = c(0,1), ylab = "Survive (Time, surv24wks)", xlab = "log (wbc counts)", main = "base R: plot of logistic model of Leuk data")
+lines(x = x.extension, y = exp(surv24.model$coefficients[1] +surv24.model$coefficients[2]*x.extension)/(1+exp(surv24.model$coefficient[1] + surv24.model$coefficients[2]*x.extension)))
+lines(x = x.extension, y = exp(surv24.model$coefficients[1] +surv24.model$coefficients[2]*x.extension + surv24.model$coefficients[3])/(1+exp(surv24.model$coefficient[1] + surv24.model$coefficients[2]*x.extension + surv24.model$coefficients[3])))
+legend("bottomleft", legend = c("Ag Absent", "Ag Present"), col = c("black", "red"), lty = c(1,1))
+
+leuk.gg <- data.frame("logwbc" = log(leuk$wbc), surv24 = q3_subset$surv24, "fv" = surv24.model$fitted.values, "ag" = leuk$ag)
+
+leuk.gg <- cbind(leuk.gg, espframe)
+ggplot(leuk.gg, aes(x = logwbc, y = fv, colour = ag)) + 
+  geom_point() +
+  # scale_colour_discrete(guide = FALSE) +
+  # guides(colour=FALSE) +
+  geom_line(aes(x = x.extension, y = agpress, colour = "present")) +
+  geom_line(aes(x = x.extension, y = agabs, colour = "absent")) +
+  labs ( title = "ggplot: plot of logistic model of Leuk data", x = "log of WBC count", y = "Survive (Time, surv24wks)")
+
+```
+
+Survival Vs WBC count with logistic model on actual data points
+
+```{r}
+# # base plot version
+line.1.dat <- leuk.gg[leuk.gg$ag == 'absent', ]
+line.2.dat <- leuk.gg[leuk.gg$ag == 'present', ]
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(
+  x = leuk.gg$logwbc,
+  y = leuk.gg$surv24,
+  xlim=c(0,15),
+  ylim = c(0,1),
+  col = leuk.gg$ag,
+  xlab = "WBC counts",
+  ylab = "Probability of Death prior to 24 Weeks",
+  main = "base R: Survival Vs WBC Counts in Leukaemia Patients"
+)
+lines(x.extension, leuk.gg$agpress, col = "green")
+lines(x.extension, leuk.gg$agabs, col = "black")
+legend(
+  "topleft",
+  title = "AG test",
+  legend = c("absent", "present"),
+  inset = c(1, 0),
+  xpd = TRUE,
+  horiz = FALSE,
+  col = c("black", "green"),
+  lty = c(1,1),
+  pch = c(1, 2),
+  bty = "n"
+)
+
+ggplot(leuk.gg, aes(x = logwbc, y = surv24, color = ag)) +
+  geom_point() +
+  scale_colour_manual(name = "AG test", values = c('black', 'green')) +
+  geom_line(aes(x = x.extension, y = agpress, colour = "present")) +
+  geom_line(aes(x = x.extension, y = agabs, colour = "absent")) +
+  labs(title = 'ggplot: Survival Vs WBC Counts in Leukaemia Patients',
+       x = 'log WBC Count',
+       y = 'Probability of Death prior to 24 Weeks') +
+  theme_classic()
+```
+    
+We will now fit a model with an interaction term between the two predictors and see which model fits the data better.
+    
+```{r}
+#fitting the model with the interaction term ag * log(wbc)
+surv24.model2 <- lm(surv24 ~ ag * log(wbc), data=q3_subset,family='binomial')
+kable(summary(surv24.model2)$coefficients, caption = "Summary of the linear model with an interaction")
+
+mod2 = summary(surv24.model2)
+mod = summary(surv24.model)
+# we can also calculate adjusted r-square value for glm using 
+
+mod.rsq.adj = rsq(surv24.model,adj=TRUE,type=c('v','kl','sse','lr','n'))
+mod2.rsq.adj = rsq(surv24.model2,adj=TRUE,type=c('v','kl','sse','lr','n'))
+# if not using package rsq
+# adj.rsq = rbind(mod2$adj.r.squared, (1 -(mod$deviance/mod$null.deviance)) * 32/(32-2-2))
+adj.rsq = rbind(mod2.rsq.adj, mod.rsq.adj)
+
+row.names(adj.rsq) <- c("Linear model with interation", "Linear model")
+kable(adj.rsq, col.names = "Adjusted R-square values")
+```
+
+Since the adjusted R-square value for Linear model with the interaction is higher, I would say the model with an interaction fits the data better.
+
+Next, we will load the $\textbf{Default}$ dataset from $\textbf{ISLR}$ library. The dataset contains information on ten thousand customers. The aim here is to predict which
+customers will default on their credit card debt. It is a four-dimensional
+dataset with 10000 observations. The question of interest is to predict
+individuals who will default. We want to examine how each predictor variable is
+related to the response (default). 
+
+First, we will perform a descriptive analysis on the dataset to have an insight. We can use summaries and appropriate exploratory graphics to answer the question of interest.
+  
+```{r}
+# Set up data
+data("Default", package = "ISLR")
+
+kable(summary(Default[,1:2]), caption = "Summary of default and student status")
+kable(summary(Default[,3:4]), caption = "Summary of Income and Balance")
+
+#create default binary
+default_binary     <-
+  ifelse(regexpr('Yes', Default$default) == -1, 0, 1)
+dflt_str <-
+  ifelse(regexpr('Yes', Default$default) == -1,
+         "Not Defaulted",
+         "Defaulted")
+
+stdn     <- ifelse(regexpr('Yes', Default$student) == -1, 0, 1)
+stdn_str <-
+  ifelse(regexpr('Yes', Default$student) == -1, "Not-Student", "Student")
+
+blnc <- Default$balance
+incm <- Default$income
+
+df <-  data.frame(default_binary, dflt_str, stdn, stdn_str, blnc, incm)
+
+# par(mfrow = c(1, 1))
+hist(blnc, main = "Balance")
+# ggplot() + geom_histogram(aes(blnc), bins = 13, color = "black", fill = "white")
+```
+
+Here, `Balance` appears roughly normal.
+
+```{r}
+hist(incm, main = "Income")
+
+cat("Dual means in income appears explained by student status")
+layout(matrix(1:2, ncol = 2))
+hist(
+  subset(df$incm, df$stdn == 1),
+  main = "Income by Student Status",
+  ylab = "Income",
+  xlab = "Student: Yes"
+)
+hist(
+  subset(df$incm, df$stdn == 0),
+  main = "",
+  ylab = "Income",
+  xlab = "Student: No"
+)
+
+```
+
+Income appears roughly normal with two means
+
+```{r}
+layout(matrix(1:2, ncol = 2))
+hist(
+  subset(df$incm, df$default_binary == 1),
+  main = "Income by Default Status",
+  ylab = "Income",
+  xlab = "Default: Yes"
+)
+hist(
+  subset(df$incm, df$default_binary == 0),
+  main = "",
+  ylab = "Income",
+  xlab = "Default: No"
+)
+
+```
+
+**And** the dual means in income appears NOT to be explained by default status
+
+Clustering of income v. balance explained by student status:
+
+```{r}
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(
+  Default$income ~ Default$balance,
+  col = Default$student,
+  main = "base R: Income by Balance",
+  ylab = "Income",
+  xlab = "Balance",
+  pch = 18
+)
+legend(
+  "topright",
+  c("Yes", "No"),
+  title = "Student?",
+  # bty = "n",
+  fill = c("red", "black"),
+  pch = c(18,18)
+)
+
+ggplot(data = Default, aes(x = balance, y = income, colour = student)) + 
+  geom_point() +
+  labs(title = "ggplot: Income by Balance") + 
+  guides(colour=guide_legend(title="Student?")) +
+  scale_color_manual(values = c("No" = "black", "Yes" = "red"))
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+boxplot(balance~student, data = Default, main = "base R: Balance grouped by Student status", xlab = "student", ylab = "balance")
+
+ggplot(data = Default, aes(x = student, y = balance)) +
+  geom_boxplot() +
+  labs(title = "ggplot: Balance grouped by Student status")
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+boxplot(balance~default, data = Default, main = "base R: Balance grouped by Default status")
+
+ggplot(data = Default, aes(x = default, y = balance)) +
+  geom_boxplot() +
+  labs(title = "ggplot: Balance grouped by Default status")
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+boxplot(income~student, data = Default, main = "base R: Income grouped by Student status")
+
+ggplot(data = Default, aes(x = student, y = income)) +
+  geom_boxplot() +
+  labs(title = "ggplot: Income grouped by Student status")
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+boxplot(income~default, data = Default, main = "base R: Income grouped by Default status")
+
+ggplot(data = Default, aes(x = default, y = income)) +
+  geom_boxplot() +
+  labs(title = "ggplot: Income grouped by Default status")
+
+```
+
+```{r}
+tapply(df$incm, df$dflt_str, FUN = summary)
+```
+
+Median and Max income are lower for defaulted than not defaulted loans. 
+
+```{r}
+tapply(df$blnc, df$dflt_str, FUN = summary)
+```
+
+Median and max balance are higher for defaulted rather than not defaulted loans.
+
+
+Based on the outputs, we can tell that a fewer people default compare to those that don’t default. Defaulters and non-defaulters appear to have the same income range, given student status. Defaulters appear to have higher balances. Also note, if students default, they likely do it with over ${1,000}$ balance. If non-students default, they are likely do it with over ${500}$ balance.
+
+
+We then build a logistic regression model to see which predictor variables were important or if there were any interactions.
+
+```{r}
+# Also see, https://stackoverflow.com/questions/13366755/what-does-the-r-formula-y1-mean
+regression_model0 <- glm(default_binary ~ stdn + blnc + incm, family = binomial())
+summary(regression_model0)
+
+# with interactions
+regression_model1 <- glm(default_binary ~ stdn + blnc + incm + stdn * blnc + stdn * incm + blnc * incm, family = binomial())
+summary(regression_model1)
+
+```
+
+Without taking interactions into account, it appears that two predictors-
+student and balance are significant. With interactions involved, it appears that
+only balance predictor is important.
+
+Next, we will assess the performance of the logistic regression classifier based on the error rates.
+
+```{r}
+
+# Error Rate
+dflt.fitted0 <- predict(regression_model0, type = "response")
+dflt.fitted1 <- predict(regression_model1, type = "response")
+
+levs <- c("Defaulted", "Not Defaulted")
+Tr <- default_binary
+
+Predicted0 <-
+  factor(ifelse(dflt.fitted0 >= 0.50, "Defaulted", "Not Defaulted"),
+         levels = levs)
+Predicted1 <-
+  factor(ifelse(dflt.fitted1 >= 0.50, "Defaulted", "Not Defaulted"),
+         levels = levs)
+Tr1 <-
+  factor(ifelse(Tr >= 0.50, "Defaulted", "Not Defaulted"), levels = levs)
+rate0 <- table(Predicted0, True = Tr1)
+rate1 <- table(Predicted1, True = Tr1)
+rate0
+error_rate0 <- 1 - (rate0[1, 1] + rate0[2, 2]) / sum(rate0)
+error_rate0
+
+rate1
+error_rate1 <- 1 - (rate1[1, 1] + rate1[2, 2]) / sum(rate1)
+error_rate1
+
+# analysis of variance
+anova(regression_model0, regression_model1, test = 'Chisq')
+
+```
+
+The model without interactions has an AIC of 1579.5 and the interaction model has
+an AIC of 1585.1 (slightly higher). But, both have almost similar error rates
+~2.7%. Also, since analysis of deviance also shows that the chi-square test has
+no significance at 5% level, we can conclude that both models are almost the
+same as a working model.
+
+
+Here, we will perform additional exploratory analysis of the dataset.
+
+```{r}
+# density plot
+plasma <- plasma
+
+layout(matrix(1:2,ncol=2))
+cdplot(ESR ~ fibrinogen, data=plasma)
+cdplot(ESR ~ globulin,data=plasma)
+```
+
+It appears that above a certain level of fibrogen, ESR drops sucessively. This is not the case for globulin. ESR Logistic Regression and Confidence Interval Estimates:
+
+```{r}
+plasma_glm_1 <- glm(ESR ~ fibrinogen, data = plasma, family=binomial())
+confint(plasma_glm_1,parm='fibrinogen')
+```
+
+Here, fibrinogen might have value as a predictor of ESR. We can look at the summary.
+
+```{r}
+summary(plasma_glm_1)
+```
+
+The summary output indicates a 5% significance of fibrinogenand and increase of the log-odds of ESR > 20 by about 1.83 with confidence interval (CI) of 0.33 to 3.99.
+
+```{r}
+exp(coef(plasma_glm_1)['fibrinogen'])
+```
+ 
+Fibrinogen might have value as a predictor of ESR. To make the results more readable, it is useful to apply an exponent function. This exponentiates the log-odds of fibriogen and CI to correspond with the data.
+
+```{r}
+exp(confint(plasma_glm_1, parm='fibrinogen'))
+```
+
+We can also perform logistic regression of both explanatory variables (fibrinogen and globulin) and text for the deviance.
+
+```{r}
+plasma_glm_2 <- glm(ESR ~ fibrinogen + globulin, data = plasma, family = binomial())
+summary(plasma_glm_2)
+
+cat("# comparison of models")
+anova(plasma_glm_1, plasma_glm_2, test= 'Chisq')
+
+```
+
+Now, we can make the bubble plot of the predicted values of model `plasma_glm_2`. The plot shows that the probablity of ‘good’ ESR reading increases as fibrinogen increases. This is true of globulin only up to a point.
+
+```{r}
+prob <- predict(plasma_glm_2, type='response')
+
+plot.new()
+par(mfrow = c(1, 1), pty = "s")
+plot(globulin ~ fibrinogen,data=plasma,xlim=c(2,6),ylim=c(25,55),pch='.', main = "Bubble plot of the predicted values of model II")
+symbols(plasma$fibrinogen,plasma$globulin,circles=prob,add=T)
+```
+
+
+## PART 2 ##
+
+In this section, we use the $\textbf{bladdercancer}$ data from the $\textbf{HSAUR3}$ library. We will Construct graphical and numerical summaries that will show the relationship between tumor size and the number of recurrent tumors. In this case a mosaic plot may be a great way to assess this relationship. 
+
+
+```{r}
+data("bladdercancer", package = "HSAUR3")
+# base R plot version
+# head(bladdercancer)
+mosaicplot(xtabs( ~ number + tumorsize, data = bladdercancer),
+           main = "base R: The Number of recurrent tumors compared with tumor size",
+           shade = TRUE)
+
+# ggplot version:
+# install.packages('ggmosaic')
+library(ggmosaic)
+ggplot(data = bladdercancer) +
+  geom_mosaic(aes(x = product(tumorsize, number), fill = tumorsize), na.rm =
+                FALSE) +
+  labs(x = "Number", x = "Tumour Size", title = 'ggplot: The Number of recurrent tumors compared with tumor size')
+
+
+
+# We can also visualize this by creating percentage table using `prop.table`
+# function.
+table_rows_percentage <-
+  table(bladdercancer$tumorsize, bladdercancer$number)
+colnames(table_rows_percentage) <-
+  c("Tumour_1 (counts)",
+    "Tumour_2 (counts)",
+    "Tumour_3 (counts)",
+    "Tumour_4 (counts)")
+cat("Table of tumour number and frequency:")
+table_rows_percentage
+
+tt <- prop.table(table_rows_percentage, 1)
+colnames(tt) <-
+  c("Tumour_1(%)", "Tumour_2(%)", "Tumour_3(%)", "Tumour_4(%)")
+
+# Table of tumour number and frequency in %:
+tt
+```
+
+Based on the mosaic plot, frequency table or the percentage table above, we can tell that the observed frequency for 1 or 2 tumors greater than 3cm (>3cm) is lower than expected and the observed frequency for 3 or 4 tumors less than or equal to 3 cm (<=3cm) is also lower than what we would expect for this data.
+
+
+Next, we will build a Poisson regression that estimates the effect of size of tumor on the number of recurrent tumors.
+
+
+If we test the model dropping the time variable. It shows that the intercept is significant (P<0.05), but the tumour size is not significant. 
+
+```{r}
+mod1 <- glm(number ~ tumorsize,data=bladdercancer,family=poisson())
+summary(mod1)
+```
+
+Additionally, we can also test models considering the time interaction. If we consider time interaction with the tumour size, we can clearly see that none of the variables are significant. 
+
+```{r}
+mod2 <- glm(number ~time + tumorsize + tumorsize*time,data=bladdercancer,family=poisson(link=log))
+summary(mod2)
+```
+
+If we drop time interaction from previous model (mod2), we still do not get anything significant with the time or tumour size. However, the AIC value drops to 88.56.
+
+```{r}
+mod3 <- glm(number ~ time + tumorsize,data=bladdercancer,family=poisson())
+summary(mod3)
+```
+
+In all three models we compared, we can also see that the residual and null deviance values are low compared to the degrees of freedom. If our null deviance is really small, it means that the null model explains the data pretty well. Likewise, with our residual deviance. Additionaly, we can perform a Chi-squared test for the null deviance to check
+whether any of the predictors have an influence on the response variables in
+our three models using function `pchisq`: 
+
+```{r}
+# Source: https://stat.ethz.ch/education/semesters/as2015/asr/Uebungen/Uebungen/solution8.pdf
+pchisq((mod1$null.deviance-mod1$deviance), df = (mod1$df.null-mod1$df.residual), lower = FALSE)
+pchisq((mod2$null.deviance-mod2$deviance), df = (mod2$df.null-mod2$df.residual), lower = FALSE)
+pchisq((mod3$null.deviance-mod3$deviance), df  = (mod3$df.null-mod3$df.residual), lower = FALSE)
+```
+
+The p-values in all three models are larger than 0.05, which tells us that there is no significant predictor in our model. Additionally, if we compare all three models we built above for analysis of deviance using ANOVA, we do not find any of these models to be significant.
+
+```{r}
+anova(mod1,mod2,mod3,test='Chisq')
+```
+
+Based on these analyses, we can tell that the acceptance of the null hypothesis is evident in this case because there is nothing within the data to explain an increment in the number of tumors. Since we tested both tumour size and time variables, we can tell that **neither time** nor the **tumour size** have any effect on increasing **number** of tumours.
+
+
+The following data is the number of new AIDS cases in Belgium between the years 1981-1993. Let $t$ denote time
+
+\begin{verbatim}
+y = c(12, 14, 33, 50, 67, 74, 123, 141, 165, 204, 253, 246, 240)
+t = 1:13
+\end{verbatim}
+Do the following 
+
+
+With this, we will first plot the relationship between AIDS cases against time.
+
+```{r}
+y = c(12, 14, 33, 50, 67, 74, 123, 141, 165, 204, 253, 246, 240)
+t = 1:13
+
+data <- as.data.frame(cbind(t, y))
+
+# base R plot version
+plot(y ~ t,
+     main = "base R: Number of AIDs cases from 1981-1993",
+     xlab = "Time in Years from 1981",
+     ylab = "Number of Aids cases")
+
+# ggplot version
+ggplot() + aes(x = t, y = y) + geom_point() + labs(title = "ggplot: Number of AIDs cases from 1981-1993", x = "Time in Years from 1981", y = "Number of Aids cases")
+
+```
+
+Here, the number of new AIDS cases has an increasing trend over time and seems to be leveling off between 1981-1991 then it remains somewhat unchanged until 1993. The maximum number of new AIDS cases occurs in 1991.
+
+
+Then, fit a Poisson regression model $log(\mu_i)=\beta_0+\beta_1t_i$. 
+
+```{r}
+cat("#2b")
+#Poisson model
+aids.pois <- glm(y ~ t, data = data, family = "poisson")
+summary(aids.pois)
+
+# Coefficients
+exp(coef(aids.pois)) # coefficients
+exp(confint(aids.pois)) # confidence interval
+#use code below for residual plots
+plot(aids.pois, which = 1, main = "base R: Residual Vs fitted plot for y ~ t")
+# https://stackoverflow.com/questions/36731027/how-can-i-plot-the-residuals-of-lm-with-ggplot
+# ggplot version
+ggplot(aids.pois, aes(x = .fitted, y = .resid)) + geom_point() + geom_smooth(group = 1, formula = y ~ x) + labs(title = "ggplot: Residual Vs fitted plot for y ~ t")
+
+```
+
+Here, both (b0) and (b1)  are statistically significant from zero. Interpretation of the coefficients calculated by exponentiating the estimates:
+exp(b1) =1.22: A one year increase will result in a 22% increase in the mean number of new AIDs cases.  
+exp(b0)=23.1: When t=0, the average number of AID cases is 23.1. 
+
+Likewise, comparing the residual deviance of the model, we can tell that the model is over-spread by 7.80 times on 11 degrees of freedom. Based on the residual plot, the residual values are further away from zero at time 1, 2, and 13,indicating they are outliers. Additionally, there is a clear pattern to the residual plot which indicates that mean does not increase as the variance increases because there is not a constant spread in the residuals.
+
+Additionally, we can see a curved pattern in the Residual vs. Fitted plot. This tells us that a transformation or adding a quadratic term to the model would be suitable.
+
+
+So, we add a quadratic term  in time (\textit{ i.e., $log(\mu_i)=\beta_0+\beta_1t_i +\beta_2t_i^2$} ) and fit the model.
+
+```{r}
+data$t2 <- data$t ^ 2
+aids2.pois <- glm(y ~ t + t2, data = data, family = "poisson")
+summary(aids2.pois)
+
+
+# Coefficients
+exp(coef(aids2.pois)) # coefficients
+exp(confint(aids2.pois)) # confidence interval
+
+#use code below for residual plots
+plot(aids2.pois, which = 1, main = "base R: Residual Vs fitted plot for y ~ t + t2")
+# ggplot version
+ggplot(aids2.pois, aes(x = .fitted, y = .resid)) + geom_point() + labs(title = "ggplot: Residuals Vs fitted plot for y ~ t + t2") + geom_smooth()
+
+```
+
+Here also, all the model parameters are statistically significant from zero. 
+
+Interpretation of the coefficients calculated by exponentiating the estimates:
+exp(b1) =1.74: Taking all other parameters constant, a one year increase will result in a 74% increase in the mean number of new AID cases.  
+
+exp(b2) =0.98 : Taking all other parameters constant, a one year increase will result in a 2% decrease in the mean number of new AID cases.  
+
+exp(b0) =6.7 : When t=0 and $t^2$=0, the average number of AID cases is 6.7.
+
+Additionally, the residuals vs. fitted values plot looks much better than the previous model, and the residuals seems randomly distributed around 0.
+
+
+We will now compare the two models using AIC to see which of the two models is better. 
+
+```{r}
+AIC(aids.pois)
+AIC(aids2.pois)
+```
+
+Based on the AIC values and the residual plots, model 2 is a better fit for this data.
+
+
+Now, we use $\textit{ anova()}$-function to perform $\chi^2$ test for model selection. Did adding the quadratic term improve model?
+
+```{r}
+anova(aids.pois, aids2.pois, test = "Chisq")
+```
+
+Based on the chi-square test statistic and p-value—in this case we reject the null hypothesis at the $\textbf{alpha}$ = 0.05 level that model 1 is true. We can tell that the larger model is better, which in this case, adding the quadratic term did improve the model.
+
+
+Next, we will load the $\textbf{ Default}$ dataset from $\textbf{ISLR}$ library. The dataset contains information on ten thousand customers. The aim here is to predict which customers will default on their credit card debt. It is a 4 dimensional dataset with 10000 observations. We had developed a logistic regression model previously. Now consider the following two models 
+
+\begin{itemize}
+\item Model1 $\rightarrow$ Default = Student + balance 
+\item Model2 $\rightarrow$ Default = Balance 
+\end{itemize}
+For the two competing models do the following
+
+Here, with the whole data, we will compare the two models. We can use AIC and/or error rate for comparison. 
+    
+```{r}
+data("Default", package = "ISLR")
+Default$default<-as.numeric(Default$default=="Yes")
+
+mod.log1<-glm(default ~ student + balance , data = Default, family = binomial())
+# summary(mod.log1)
+
+mod.log2<-glm(default ~ balance , data = Default, family = binomial())
+
+cat("AIC for mod.log1:")
+AIC(mod.log1)
+cat("AIC for mod.log2:")
+AIC(mod.log2)
+
+anova(mod.log1, mod.log2, test="Chisq")
+```
+
+Here, the first model with both student and balance has the smaller AIC. The anova-function was also used to perform a chi-square test for model selection and again concluded the first model was better.
+
+
+Now, we will use a validation set approach to choose the best model. Be aware that we have a few people who defaulted in the data. 
+
+```{r}
+# Validation approach"
+index<-sample(1:nrow(Default), size=0.6*nrow(Default))
+train<- Default[index, ]
+val<- Default[-index, ]
+
+
+mod.train1<-glm(default ~ student + balance , data = train, family = binomial())
+# summary(mod.train1)
+mod.train2<-glm(default ~ balance , data = train, family = binomial())
+# summary(mod.train2)
+pred1<-predict(mod.train1, val, type = "response")
+pred2<-predict(mod.train2, val, type = "response")
+
+# Error rate:
+err.rate1<- mean((pred1>0.5 & val$default==0) | (pred1<0.5 & val$default==1))
+err.rate2<- mean((pred2>0.5 & val$default==0) | (pred2<0.5 & val$default==1))
+
+cat("Error rate of model1 =", err.rate1)
+cat("Error rate of model2 =", err.rate2)
+
+
+```
+
+Here, we split the data into 60/40 between the training and validation data sets and made sure the default rate was similar between the two dataset. Then fitted the models to the training data and used the validation set to calculate the error rate using 0.5 as out threshold.
+
+For model 1, the MSE is 0.023.
+For model 2, the MSE is 0.024.
+
+Based on these values we would chose model 1 as our best model. We will also examine other validation techniques below.
+
+
+Next, we will use LOOCV approach to choose the best model.
+
+```{r}
+# 3c LOOCV
+library(boot)
+cost <- function(r, pi = 0) mean(abs(r-pi) > 0.5)
+cv.err <- cv.glm(Default,mod.log1, cost)$delta
+cv.err2 <- cv.glm(Default, mod.log2, cost)$delta
+
+cat("LOOCV of model1")
+cv.err
+cat("LOOCV of model2")
+cv.err2
+
+```
+
+LOOCV prediction error is adjusted for bias and we still want the smallest prediction errors.
+For model 1, the adjusted prediction error is 0.0267.
+For model 2, the adjusted prediction error is 0.02749994.
+
+Therefore, we choose model 1 as the best model because it has the smaller adjusted prediction rate using the LOOCV approach.   
+
+
+We will now use 10-fold cross-validation approach to choose the best model. We will report on the validation misclassification (error) rate for both models in each of the three assessment methods.
+
+```{r}
+# 3d 10-fold cross validation
+cv.err1.10 <- cv.glm(Default, mod.log1, cost ,K=10)$delta
+cv.err2.10 <- cv.glm(Default, mod.log2, cost ,K=10)$delta
+
+cat("10-fold cross validation of Model1")
+cv.err1.10
+cat("10-fold cross validation of Model2")
+cv.err2.10
+```
+
+Using K=10 for the 10-fold cross-validation approach, we obtain the following error rates:
+For model 1, the CV error rate is 0.02667
+For model 2, the CV error rate is 0.0278
+
+Again, we can choose model 1 as our best model. Though it was little easier to calculate the 10-fold cross validation error rate than the LOOCV error rate, but our conclusion is still the same. 
+
+
+
+From the $\textbf{ISLR}$ library, we will load the $\textbf{Smarket}$ dataset. This contains Daily percentage returns for the `S&P 500 stock` index between 2001 and 2005. There are 1250 observations and 9 variables. The variable of interest is Direction which is a factor with levels Down and Up indicating whether the market had a positive or negative return on a given day. Since the goal is to predict the direction of the stock market in the future, here it would make sense to use the data from years 2001 - 2004 as training and 2005 as validation. According to this, create a training set and testing set. 
+
+We will Perform logistic regressions and assess the error rates. 
+
+```{r}
+data("Smarket", package = "ISLR")
+Smarket$Direction <- as.numeric(Smarket$Direction == "Up")
+
+train.mark <- subset(Smarket, Year <= 2004)
+val.mark <- subset(Smarket, Year > 2004)
+
+
+#Model 1
+mod.train.mark <-
+  glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 ,
+      data = train.mark,
+      family = binomial())
+summary(mod.train.mark)
+err.rate1 <-
+  mean((
+    predict(mod.train.mark, val.mark, type = "response") - val.mark$Direction
+  ) ^ 2)
+
+cat("Error rate model1:")
+err.rate1
+
+#Model 2
+mod.train.mark2 <-
+  glm(Direction ~ Lag1 + Lag2 + Lag3,
+      data = train.mark,
+      family = binomial())
+summary(mod.train.mark2)
+err.rate2 <-
+  mean((
+    predict(mod.train.mark2, val.mark, type = "response") - val.mark$Direction
+  ) ^ 2)
+
+cat("Error rate model2:")
+err.rate2
+```
+
+The error rate for model 1 which includes predictor variables lag 1-5 is: 0.4126984.
+The error rate for model 2 which includes predictor variables lag 1-3 is: 0.4087302.
+
+So, we can choose the simpler model 2 based on the error rate. This error rate suggests that we are able to predict the direction of the stock market. We can predict the right outcome at around 60% of the time, which is still better than predicting randomly.

@@ -1,0 +1,107 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Clustering"
+date: 2023-10-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+- Machine Learning
+summary: Statistics series
+---
+
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+PVE can be obtained using the "sdev" output of the "prcomp()" function. On the "USArrests" data. We will calculate PVE in two ways, first, Using the "sdev" output of the `prcomp()` function.
+
+```{r}
+prcu <- prcomp(USArrests, center=T, scale=T)
+pve <- prcu$sdev^2 / sum(prcu$sdev^2)
+pve
+```
+
+Then, by using the "prcomp()" function to compute the principal component loadings. Then, using those loadings in the equation to obtain the PVE.
+
+```{r}
+loadings <- prcu $rotation
+USArrests1 <- scale(USArrests)
+sumvar <- sum(apply(as.matrix(USArrests1)^2, 2, sum))
+apply((as.matrix(USArrests1) %*% loadings)^2, 2, sum) / sumvar
+```
+Now, we will use the `USArrests` data. We will perform hierarchical clustering on the states. Using hierarchical clustering with complete linkage and Euclidean distance, we will cluster the states.
+```{r}
+set.seed(702)
+cat("Hierarchical clustering - complete linkage")
+usar.hc.comp <- hclust(dist(USArrests), method = "complete")
+
+cat("Plot dendrogram")
+plot(usar.hc.comp, 
+     main = "Hierarchical Clustering - Complete Linkages",
+     xlab = "", sub = "", cex = 0.4)
+```
+Now, we will cut the dendrogram at a height that results in three distinct clusters. We will find out which states belong to which clusters.
+```{r}
+usar.hc.cut <- data.frame(cutree(usar.hc.comp, 3))
+usar.hc.cut
+```
+Now, we will hierachically cluster the states using complete linkage and Euclidean distance, after scaling the variables to have standard deviation one.
+```{r}
+usar.scale <- scale(USArrests)
+cat("Hierarchical clustering - complete linkage")
+usar.scale.hc.comp <- hclust(dist(usar.scale), method = "complete")
+cat("Plot dendrogram")
+plot(usar.scale.hc.comp, 
+     main = "Hierarchical Clustering - Complete Linkages 
+     with Scaled Featues",
+     xlab = "", sub = "", cex = 0.4)
+
+library(ggplot2)
+library(ggdendro)
+ggdendrogram(usar.scale.hc.comp, rotate = FALSE, size = 2)
+```
+Scaling the variables impacts the clusters that are obtained, the branch lengths, and the height of the tree.
+
+In this scenario, scaling is more appropriate because Murder, Assault, and Rape all have unites of per 100,000 people while UrbanPop is the percentage of the state population that lives in urban areas. Therefore, it is imporant to scale so that the units of UrbanPop has an equal contribution to the hierarchical clustering algorithm as the other variables.
+```{r}
+plot(usar.hc.comp,main="Complete Linkage Without Scaling", xlab="", sub="", cex=.4)
+plot(usar.scale.hc.comp, main="Complete Linkage with Scaled Variables", xlab = "", sub = "", cex = 0.4)
+```
+There is a gene expression dataset that consists of 40 tissue samples with measurements on 1000 genes. The first 20 samples are from healthy patients, while the second 20 are from a diseased group. We will load in the data using `read.csv()`. We will need to select `header=F`.
+```{r}
+dt <-read.csv("https://raw.githubusercontent.com/achalneupane/data/master/Ch10Ex11.csv", header = F)
+```
+Next, we will apply hierarchical clustering to the samples using correlation-based distance, and plot the dendrogram. We will try to find out whether the genes separate the samples into two groups. We will also check if our results depend on the type of linkage used.
+```{r}
+dis <- as.dist(1-cor(dt))
+hc.complete <- hclust(dis, method = "complete")
+hc.single <- hclust(dis, method = "single")
+hc.avg <- hclust(dis, method = "average")
+plot(hc.complete)
+
+plot(hc.single)
+plot(hc.avg)
+```
+We don’t seem to be able to split the data into the correct two clusters. We can see that the complete linkage method is close.
+
+If we want to know which genes differ the most across the two groups, perhaps we can look at the means.
+```{r}
+library(magrittr)
+group1 <- dt %>% dplyr::select(V1:V20)
+group2 <- dt %>% dplyr::select(V21:V40)
+means1 <- apply(group1, 1, mean)
+means2 <- apply(group2, 1, mean)
+meds1 <- apply(group1, 1, median)
+meds2 <- apply(group2, 1, median)
+
+ggplot(data.frame(means1, means2), aes(x=means1,y=means2)) + geom_point() + labs(x="Mean healthy", y="Mean unhealthy")
+
+ggplot(data.frame(meds1, meds2), aes(x=meds1,y=meds2)) + geom_point() + labs(x="Median healthy", y="Median unhealthy")
+
+ggplot(data.frame(diff = abs(means1-means2), ind = 1:1000), aes(x=ind,y=diff)) + geom_point()
+```

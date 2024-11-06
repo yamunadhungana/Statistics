@@ -1,0 +1,274 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Quantile Regression"
+date: 2020-10-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+summary: Statistics series
+---
+
+
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+
+
+Quantile regression is a type of regression analysis used in statistics and econometrics. While the method of `least squares` estimates the conditional mean of the response variable across values of the predictor variables, `quantile regression` estimates the conditional median (or other quantiles) of the response variable. Quantile regression is an extension of linear regression used when the conditions of linear regression are not met.
+
+One advantage of quantile regression relative to ordinary least squares regression is that the quantile regression estimates are more robust against outliers in the response measurements. However, the main attraction of quantile regression goes beyond this and is advantageous when conditional quantile functions are of interest. Quantile regression has been proposed and used as a way to discover more useful predictive relationships between variables in cases where there is no relationship or only a weak relationship between the means of such variables.
+
+Beyond simple linear regression, there are several machine learning methods that can be extended to quantile regression. A switch from the squared error to the tilted absolute value loss function allows gradient descent based learning algorithms to learn a specified quantile instead of the mean. It means that we can apply all neural network and deep learning algorithms to quantile regression. Tree-based learning algorithms are also available for quantile regression (see, e.g., Quantile Regression Forests, as a simple generalization of Random Forests).
+
+Here, we will use some examples of quatile regression methods. First, we will use the {$\textbf{clouds}$} data from the {$\textbf{HSAUR3}$} package to review the linear model fitted to this data and report the model and findings. Then we will fit a median regression model and compare the two results. 
+    
+```{r}
+library(tidyverse)
+library(gridExtra)
+library(HSAUR3)
+library(mboost)
+library("quantreg")
+library("rpart")
+library("TH.data")
+library(gamlss.data)
+library(lattice)
+data(clouds)
+head(clouds)
+
+cat("Fitting the linear model")
+clouds_formula <- rainfall ~ seeding + seeding:(sne + cloudcover + prewetness + echomotion) + time
+clouds.lm <- glm(clouds_formula, data = clouds)
+summary(clouds.lm)
+
+cat("It looks like the seedingyes variable is the most significant variable in the model followed by seedingyes:sne")
+
+cat("Now we choose continous variable sne to fit our linear model")
+clouds.lm <- glm(rainfall ~ sne, data = clouds)
+summary(clouds.lm)
+MSE.lm <- mean((predict(clouds.lm, data = clouds)-clouds$rainfall)^2)
+cat("Linear model MSE: ",MSE.lm)
+ggplot(data=clouds, aes(x=sne, y=rainfall, col=seeding)) + geom_point() + geom_smooth(method='lm') + labs(title='Rainfall determined by suitability criterion',x='S-NE Criterion', y='Rainfall')
+
+
+cat("Now, fit a median regression (quantile regression) model")
+median.reg <- rq(rainfall ~ sne, data = clouds, tau = 0.5)
+cat("Summary of the model")
+summary(median.reg)
+cat("Summary of model with bootstrapped standard error")
+summary(median.reg, se = "boot" )
+MSE.mrm <- mean((predict(median.reg, data = clouds, type = "response")-clouds$rainfall)^2)
+cat("MSE of median regression Model: ",MSE.mrm)
+
+cat("We can also plot this model to compare with previous linear model")
+
+plot_linear <- ggplot(data=clouds, aes(x=sne, y=rainfall, col=seeding)) + geom_point() + geom_smooth(method='lm',se=FALSE) + labs(title='Linear regression model: Rainfall\n determined by suitability criterion',x='S-NE Criterion', y='Rainfall') + theme_classic()
+
+
+plot_median <- ggplot(data=clouds, aes(x=sne, y=rainfall, col=seeding)) + geom_point()  + labs(title='Median regression model: Rainfall\n determined by suitability criterion',x='S-NE Criterion', y='Rainfall') + stat_quantile(quantiles=c(0.50), method='rq') + theme_classic()
+
+grid.arrange(plot_linear, plot_median, ncol=2)
+
+```
+    
+
+In addition to fitting the the two models, I used graphical methods to compare a linear regression fit vs median regression fit. As shown in the plots, a median regression model on the data splits the absence of seeding in such a way that the median regression line has a positive slope, whereas, the  simple linear regression model seems to have the negative slope. This indicates that there is higher variability in the rainfall data when cloud seeding is absent. Additionally, in presence of seeding, the median regression line is not weighted by the outliers, therefore seems better at explaining the overall data due to the high variability of the rainfall variable.
+
+
+
+Now, we will reanalyze the ${\textbf{bodyfat}}$ data from the ${\textbf{TH.data}}$ package and compare the regression tree approach to median regression and summarize the different findings. Here, we will choose one independent variable. For the relationship between this variable and `DEXfat`, we will create linear regression quantile models for the 25%, 50% and 75% quantiles. We will then plot `DEXfat` vs that independent variable and plot the lines from the models on the graph.
+    
+    
+```{r}
+data("bodyfat")
+head(bodyfat)
+ncol(bodyfat)
+nrow(bodyfat)
+library("rpart")
+# ?bodyfat
+
+cat("First, fit regression tree model")
+#bodyfat_formula <- DEXfat ~ age + waistcirc + hipcirc + elbowbreadth + kneebreadth
+bodyfat_rp  <- rpart(DEXfat ~ age + waistcirc + hipcirc + elbowbreadth + kneebreadth, data = bodyfat, control = rpart.control(minsplit=10))
+summary(bodyfat_rp)
+
+cat("Plot the regression tree model")
+library(partykit)
+plot(as.party(bodyfat_rp), tp_args = list(id=FALSE), main = "Regression tree of the model")
+
+cat("Print CP-table")
+print(bodyfat_rp$cptable)
+
+cat("CP value with lowest xerror")
+min.cp <- which.min(bodyfat_rp$cptable[,'xerror'])
+min.cp
+
+cat(
+  "We can fit the model\n using lowest xerror rate from CP for prunning tree model"
+)
+
+#extract the lowest CP
+cp <- bodyfat_rp$cptable[min.cp, 'CP']
+bodyfat_prune <- prune(bodyfat_rp, cp=cp)
+
+cat("Summary of the median regression model")
+#Median Regression model
+bodyfat_rpart_qrm <- rq(DEXfat ~ age + waistcirc + hipcirc + elbowbreadth + kneebreadth, data=bodyfat, tau = 0.50)
+summary(bodyfat_rpart_qrm)
+bodyfat_rpart_qrm_summary <- summary(bodyfat_rpart_qrm) 
+
+#Predict Pruned regression tree model on the bodyfat data set
+RegressionTree <- predict(bodyfat_prune, data=bodyfat)
+
+#Create observed value and the predicted value
+observed <- bodyfat$DEXfat
+predict <- RegressionTree
+
+#Regression.Tree MSE
+RegressionTree.MSE <- mean((observed - predict)^2)
+
+#Median Regression MSE
+MedianRegression.MSE <- mean(bodyfat_rpart_qrm_summary$residuals^2)
+
+df <- data.frame(
+  RegressionTree.MSE,
+  MedianRegression.MSE
+)
+
+cat("MSE of both models")
+df
+
+cat("Based on this, pruned regression tree has lower MSE than median regression model")
+
+
+cat("Plot based on the regression tree prunning")
+plot(as.party(bodyfat_prune), tp_args = list(id=FALSE), main = "Plot based on the regression tree prunning")
+
+cat(
+  "Based on the above pruned tree, the variables waist circumference and hip circumference splits explain the majority of the data and I will be choosing one of these variables for quantile regression."
+)
+
+cat("Additionally, I will check with linear regression for the variable with significant effect")
+
+check.lm <- lm(DEXfat ~ age + waistcirc + hipcirc + elbowbreadth + kneebreadth, data = bodyfat)
+
+summary(check.lm)
+
+cat("Looks like waistcirc is the most significant, so we will choose this variable")
+
+cat("Now we can run a median quantile regression")
+bodyfat_qrm_25 <- rq(DEXfat ~ age + waistcirc, data = bodyfat, tau = 0.25)
+summary(bodyfat_qrm_25)
+bodyfat_qrm_50 <- rq(DEXfat ~ age + waistcirc, data = bodyfat, tau = 0.50)
+summary(bodyfat_qrm_50)
+bodyfat_qrm_75 <- rq(DEXfat ~ age + waistcirc, data = bodyfat, tau = 0.75)
+summary(bodyfat_qrm_50)
+
+cat("DEXfat explained by waist circumference at quantile 25%, 50%, and 75% regression lines")
+
+plot(data=bodyfat, DEXfat~waistcirc, main="baseR: Quantile regression- DEXfat Explained by waist circumference", xlab='Waist circumference')
+abline(rq(DEXfat ~ waistcirc, data=bodyfat, tau = 0.25), col='blue')
+abline(rq(DEXfat ~ waistcirc, data=bodyfat, tau = 0.50), col='green')
+abline(rq(DEXfat ~ waistcirc, data=bodyfat, tau = 0.75), col='black')
+legend('topleft', legend = c('25% Quantile', '50% Quantile', '75% Quantile'),
+       fill=c('blue','green','black'))
+
+ggplot(data=bodyfat, aes(x=waistcirc, y=DEXfat)) + geom_point() + stat_quantile(quantiles=c(0.25), method='rq', aes(colour='25%')) + stat_quantile(quantiles=c(0.50), method='rq', aes(colour='50%')) + 
+  stat_quantile(quantiles=c(0.75), method='rq', aes(colour='75%')) +
+  labs(title="ggplot: Quantile regression- DEXfat Explained by waist circumference", x='Waist circumference', y='DEXfat') +
+scale_color_manual(name="Quantile Percent", values = c('25%' = "blue", '50%' = "green", '75%' = "black"))
+
+```
+
+Based on the above pruned tree, the variables waist circumference and hip circumference splits explain the majority of the data, and I chose waist circumference for quantile regression. Based on this analysis, pruned regression tree has lower MSE than median regression model. The relationship of Dexfat to Age by Waist Circumference, all three quantiles  regression lines have a positive, and seemingly similar slopes.
+    
+
+Next, we will use the ${\textbf{db}}$ data from the package ${\textbf{gamlss.data}}$. Refit the additive quantile regression models presented ${\textbf{rqssmod}}$ with varying values of $\lambda$ (lambda) in {\textbf{qss}}. We will visualize the change in curves for the estimated quantile.
+
+```{r}
+data(db)
+head(db)
+dim(db)
+tau <- c(.03, .15, .5, .85, .97)
+
+
+cat("Parameters: lambda = 0")
+rqssmod <- vector(mode = "list", length = length(tau))
+db$lage <- with(db, age^(1/3))
+for (i in 1:length(tau))
+  rqssmod[[i]] <- rqss(head ~ qss(lage, lambda = 0), data = db, tau = tau[i])
+
+gage <- seq(from = min(db$age), to = max(db$age), length = 50)
+p <- sapply(1:length(tau), function(i) { predict(rqssmod[[i]], newdata = data.frame(lage = gage^(1/3)))
+})
+
+pfun <- function(x, y, ...) {
+  panel.xyplot(x = x, y = y, ...)
+  apply(p, 2, function(x) panel.lines(gage, x))
+  panel.text(rep(max(db$age), length(tau)),
+             p[nrow(p),], label = tau, cex = 0.9)
+}
+
+xyplot(head ~ age, data = db, main = "Head circumference curve with lambda = 0",
+       xlab = "Age (years)", ylab = "Head circumference (cm)", pch = 19,
+       scales = list(x = list(relation = "free")),
+       layout = c(1, 1), col = rgb(.1, .1, .1, .1),
+       panel = pfun)
+
+cat("Parameters: lambda = 1; and tau same as before")
+
+rqssmod <- vector(mode = "list", length = length(tau))
+db$lage <- with(db, age^(1/3))
+for (i in 1:length(tau))
+  rqssmod[[i]] <- rqss(head ~ qss(lage, lambda = 1), data = db, tau = tau[i])
+
+gage <- seq(from = min(db$age), to = max(db$age), length = 50)
+p <- sapply(1:length(tau), function(i) { predict(rqssmod[[i]], newdata = data.frame(lage = gage^(1/3)))
+})
+
+pfun <- function(x, y, ...) {
+  panel.xyplot(x = x, y = y, ...)
+  apply(p, 2, function(x) panel.lines(gage, x))
+  panel.text(rep(max(db$age), length(tau)),
+             p[nrow(p),], label = tau, cex = 0.9)
+}
+
+xyplot(head ~ age, data = db, main = "Head circumference curve with lambda=1",
+       xlab = "Age (years)", ylab = "Head circumference (cm)", pch = 19,
+       scales = list(x = list(relation = "free")),
+       layout = c(1, 1), col = rgb(.1, .1, .1, .1),
+       panel = pfun)
+
+cat("Parameters: lambda = 20; and tau same as before")
+
+rqssmod <- vector(mode = "list", length = length(tau))
+db$lage <- with(db, age^(1/3))
+for (i in 1:length(tau))
+  rqssmod[[i]] <- rqss(head ~ qss(lage, lambda = 20), data = db, tau = tau[i])
+
+gage <- seq(from = min(db$age), to = max(db$age), length = 50)
+p <- sapply(1:length(tau), function(i) { predict(rqssmod[[i]], newdata = data.frame(lage = gage^(1/3)))
+})
+
+pfun <- function(x, y, ...) {
+  panel.xyplot(x = x, y = y, ...)
+  apply(p, 2, function(x) panel.lines(gage, x))
+  panel.text(rep(max(db$age), length(tau)),
+             p[nrow(p),], label = tau, cex = 0.9)
+}
+
+xyplot(head ~ age, data = db, main = "Head circumference curve with lambda=20",
+       xlab = "Age (years)", ylab = "Head circumference (cm)", pch = 19,
+       scales = list(x = list(relation = "free")),
+       layout = c(1, 1), col = rgb(.1, .1, .1, .1),
+       panel = pfun)
+```
+
+Here, lambda acts as a shinkage factor which causes the quantiles to become smoother (at higher lambda) rather than becoming wavy or rough with lower values of labda (lambda = 0). So, I found that by increasing the penalty term lambda, which is assigned to the slope of the coefficients, the overall fit of the additive quantile regression model can be smoothen.
+ 
+In conclusion, quantile regression allows large sample groups or population size into fractals distribution or smaller quantiles represented by a parameter 	\( \tau \) (tau) by maintaining the same 	\( \tau \) for observations above and below the quantile and minimizing the sum of weighted absolute residuals. Some distributions with longer tails can weigh the mean so that the regression of the least squares can provide a false representation of the results. A more precise description of the data and underlying patterns can be obtained using quantile regression. This is particularly useful in econometrics where there are often large outliers that can have a significant impact on a least squares model. Basically, when dealing with the datasets we need to assess our needs, such as, whether we are concerned about percentiles or median value or interested in average values and minimizing the residuals errors.

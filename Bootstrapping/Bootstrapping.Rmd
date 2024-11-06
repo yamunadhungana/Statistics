@@ -1,0 +1,461 @@
+---
+Authors: ["**Yamuna Dhungana**"]
+title: "Bootstrapping"
+date: 2023-10-18T17:26:23-05:00
+draft: false
+output: html_document
+tags:
+- R
+- Statistics
+- Machine Learning
+summary: Statistics series
+---
+
+
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+```{r global options, include = F}
+knitr::opts_chunk$set(echo=T, warning=FALSE, message=FALSE)
+```
+
+Bootstrapping is any test or metric that uses random sampling with replacement (e.g. mimicking the sampling process), and falls under the broader class of resampling methods. Bootstrapping assigns measures of accuracy (bias, variance, confidence intervals, prediction error, etc.) to sample estimates. This technique allows estimation of the sampling distribution of almost any statistic using random sampling methods.
+
+Bootstrapping estimates the properties of an estimator (such as its variance) by measuring those properties when sampling from an approximating distribution.
+
+We will continue to consider the use of a logistic regression model to predict the probability of default using income and balance on the Default data set. In particular, we will now compute estimates for the standard errors of the income and balance logistic regression co- efficients in two different ways: 
+
+(a) Using the summary() and glm() functions, determine the estimated standard errors for the coefficients associated with income and balance in a multiple logistic regression model that uses both predictors.
+
+```{r}
+library(ISLR)
+data(Default)
+def=Default
+
+logmodela=glm(default~income+balance,data=def, family=binomial)
+summary(logmodela)
+```
+Using income and balance predictor, a logistic model was built using all the data (nothing was stated if any subset to be used). The estimated standard errors of the coefficients of the logistic model were found to be ${\displaystyle 4.98*10^{-6}}$ and ${\displaystyle 2.27*10^{-4}}$ for income and balance variables, respectively.
+
+
+(b) We will write a function, `boot.fn()`, that takes as input the Default data set as well as an index of the observations, and that outputs the coefficient estimates for income and balance in the multiple logistic regression model.
+```{r}
+boot.fn=function(Default,index){ ## 1          
+  subdata=Default[index,]        ## 2
+  bootmodel=glm(default~income+balance,data=subdata, family=binomial) ## 3
+  return((bootmodel$coeff)[c(2,3)]) ## 4
+}
+
+cat("For testing purpose")
+boot.fn(def, c(1:dim(def)[1])) ## same as the original model
+```
+Next, we use the `boot()` function together with our `boot.fn()` function to estimate the standard errors of the logistic regression coefficients for income and balance.
+
+```{r,echo=FALSE}
+library(boot)
+set.seed(702)
+bstd=boot(Default, boot.fn,R=100)
+print(bstd)
+# ORDINARY NONPARAMETRIC BOOTSTRAP
+
+Rvalues=c(10,20,50,100,150,200,250,300,400,500)
+incomesd=rep(NA,length(Rvalues))->balancesd
+for(i in 1:length(Rvalues)){
+  set.seed(702)
+  loopb=boot(Default, boot.fn,R=Rvalues[i])
+  incomesd[i]=sd(loopb$t[,1])
+  balancesd[i]=sd(loopb$t[,2])
+}
+
+
+B=c(Rvalues,1000)
+incomesd1=c(incomesd,4.946344e-06)
+balancesd1=c(balancesd,2.300389e-04)
+
+plot(incomesd1~B,col=2,pch=16,ylab="",
+     xlab="Number of replicates",ylim=c(4e-6,5e-6))
+abline(h=4.985e-6,col=2,lty=2,lwd=2)
+abline(h=c(40:50)/1e7,v=c(0:10)*100,lty=3,col="gray")
+legend("bottomright",c("Bootstrap Est. SE of income coeff.","Estimation by glm"),
+       col=2, pch=c(16,NA),lty=c(NA,2),lwd=c(NA,2),bty="n")
+
+
+plot(balancesd1~B,col=4,pch=16,ylab="",ylim=c(17e-5,25e-5),
+     xlab="Number of replicates")
+abline(h=2.274e-04  ,col=4,lty=2,lwd=2)
+abline(h=c(17:25)/1e5,v=c(0:10)*100,lty=3,col="gray")
+legend("bottomright",c("Bootstrap Est. SE of balance coeff.","Estimation by glm"),
+       col=4, pch=c(16,NA),lty=c(NA,2),lwd=c(NA,2),bty="n")
+```
+We see that the bootstrap estimates are very close to the estimated values by the logistic model using glm. The bootstrap was performed for a number of B values, where B indicates the number of bootstrap replicates. The two figures show the bootstrap estimation of SE of the variables using different B. Each time the operation was started with the same seed value. Dashed line shows the estimation by glm method. It is seen that as we increase B, the bootstrap estimation gets more stability.
+
+We will now use the Boston housing data set, from the MASS library. Based on this dataset, we will provide an estimate for the population mean of medv. We will call this estimate ${μ}$.
+```{r}
+library(MASS)
+data(Boston)
+BH=Boston
+cat("Estimation of the population mean is the sample mean")
+muhat=mean(BH$medv)
+print(muhat)
+```
+A straightforward estimation of the population mean is the sample mean. The estimated population mean of medv was found to be 22.53281.
+
+Next, we will provide an estimate of the standard error of ${μ}$. We can compute the standard error of the sample mean by dividing the sample standard deviation by the square root of the number of observations.
+
+```{r}
+SEmuhat=sqrt(var(BH$medv)/dim(BH)[1])
+print(SEmuhat)
+```
+Now estimate the standard error of ${μ}$ˆusing the bootstrap and compare this our prior estimates.
+```{r}
+medv.mean=function(BH,index){
+  return(mean(BH[index,]$medv))
+}
+
+B_values=c(50,100,200,300,400,500,1000,1500,2000,2500,3000,3500,4000)
+medbootsd=rep(NA,length(B_values))
+for(i in 1:length(B_values)){
+  set.seed(702)
+  medbootsd[i]= sd((boot(BH,medv.mean,R=B_values[i]))$t)
+}
+plot(medbootsd~B_values,type="b",pch=4,col="salmon",lwd=2,ylim=c(0.35,0.45),
+     ylab="Est. SE of muhat",xlab="Number of Bootstrap replicates")
+abline(h=c(36:44)/100,v=c(0:8)*500,lty=3,col="gray")
+```
+The figure here plots the estimated SE for different B values. We see the estimation does not stabilize within B=4000 (note: each time we used seed 702).
+We chose 3000 as our B value. Using 3000 bootstrap replicates and 702 as seed, the standard error of  was found to be 0.4130941. This is a bit larger (by 1.03%) than the estimated value calculated previously. 
+
+
+Based on our bootstrap estimate, we now provide a 95 % confidence interval for the mean of medv. We can approximate a 95 % confidence interval using the formula ${[μˆ − 2SE(μˆ), μˆ + 2SE(μˆ)]}$ (which is normal based method). 
+```{r}
+qnorm(0.975)
+set.seed(702)
+medvboot=boot(BH,medv.mean,R=3000)
+medvboot
+
+boot.ci(medvboot,conf = 0.95)
+hist(medvboot$t,prob=T,col="tan",xlab=expression(hat(mu)))
+
+t.test(BH$medv)
+```
+The function returned the 95% CI based on four methods, normal based, basic, percentile based and adjusted percentile based (BCa). Percentile based picks the 2.5th percentile and 97.5th percentile from the mean values calculated for all the bootstrap replicates. All the methods resulted in almost the same CI. 
+The figure plots the probability density function (PDF) of all the muhat values, calculated for all 3000 bootstrap replicates. It looks like a nice normal shape. So, normal based CI (21.73, 23.34) should be pretty good estimation for this case. In fact, t.test gave the same answer within 2 decimal points.
+
+
+
+Now, based on this dataset, we will provide an estimate, ${\hat{\mu_{med}}}$, for the median value of medv in the population.
+```{r}
+hist(BH$medv,breaks=25,col="aliceblue",prob=T,xlab="medv")
+
+medhat=median(BH$medv)
+medhat
+```
+In general, the sample median is the best estimate of the population median. Things get complex if the data is clustered. This figure above shows the PDF of medv. With relatively low bin width, there seems to be no clusters. Hence the sample median was chosen as an estimate of the population mean, which is 21.2. This is lower than the estimated population. This is expected, as the medv distribution is right skewed.
+
+We now would like to estimate the standard error of ${\hat{\mu_{med}}}$. Unfortunately, there is no simple formula for computing the standard error of the median. Instead, we will estimate the standard error of the median using the bootstrap.
+```{r}
+medv.med=function(BH,index){
+  return(median(BH[index,]$medv))
+}
+
+medianbootsd=rep(NA,length(B_values))
+for(i in 1:length(B_values)){
+  set.seed(702)
+  medbootsd[i]= sd((boot(BH,medv.med,R=B_values[i]))$t)
+}
+
+plot(medbootsd~B_values,type="b",pch=4,col="deepskyblue",lwd=2,ylim=c(0.3, 0.42),
+     ylab="Est. SE of muhatmedian",xlab="Number of Bootstrap replicates")
+abline(h=c(30:42)/100,v=c(0:8)*500,lty=3,col="gray")
+
+
+medianboot=boot(BH,medv.med,R=1500)
+medianboot
+```
+The figure above shows the bootstrap estimation of the standard error of  for several values of B. We see the bootstrap estimation is quite stable for B>1500. So, we chose B=1500. Using 1500 bootstrap replicates, the estimated standard error of by bootstrap method is 0.3848604. This value is little less than the estimated standard error of sample mean.
+Based on this data set, provide an estimate for the tenth per- centile of medv in Boston suburbs. Call this quantity ${\hat{\mu_{0.1}}}$. Here, we can use the `quantile()` function.
+
+```{r}
+muhat.1=quantile(BH$medv, probs=0.1)
+muhat.1
+```
+The population 10th percentile is estimated by the sample 10th percentile, which is 12.75.
+Here, we will use the bootstrap to estimate the standard error of ${\hat{\mu_{0.1}}}$.
+```{r}
+medv.1=function(BH,index){
+  return(quantile(BH[index,]$medv,probs=0.1))
+}
+
+B_values=c(50,100,200,300,400,500,1000,1500,2000,2500,3000,3500,4000,5000,6000)
+bootsd.1=rep(NA,length(B_values))
+for(i in 1:length(B_values)){
+  set.seed(702)
+  bootsd.1[i]= sd((boot(BH,medv.1,R=B_values[i]))$t)
+}
+plot(bootsd.1~B_values,type="b",pch=4,col="darkgreen",lwd=2,ylim=c(0.38, 0.52),
+     ylab="Est. SE of muhat0.1",xlab="Number of Bootstrap replicates")
+abline(h=c(38:52)/100,v=c(0:12)*500,lty=3,col="gray")
+
+set.seed(702)
+bootlast=boot(BH,medv.1,R=5000)
+bootlast
+
+P=c(1:99)/100
+xvalues=qnorm(P)
+fx=dnorm(xvalues)
+
+variance=P*(1-P)/length(P)/(fx^2)
+plot(variance~P,col="coral",type="l",lwd=3,xlab="Percentile",
+     ylab="proportional to variance")
+abline(v=c(0:10)/10,h=c(2:14)/100,lty=3, col="gray")
+```
+In the past, we have used different classification methods to analyze the dataset. Now we will use the following:
+
+i) Validation Set Approach (VSA)
+ii) LOOCV and 5-fold Cross Validation to estimate the test error for the following models. Choose the best model based on test error.
+iii) Logistic Regression (or Multinomial Logistic Regression for more than two classes) iv) KNN (choose the best of K)
+v) LDA vi) QDA
+vii) MclustDA - best model chosen by BIC viii) MclustDA with modelType=“EDDA”
+ix) Find a new method that can do classification.
+
+```{r}
+library(MASS)
+library(mclust)
+library(class)
+library(rpart)
+data("biopsy")
+set.seed(702)
+
+bc <- biopsy
+colnames(bc) <- c("Samplecodenumber ","Clumpthinkness","CellSize","Cellshape ","MarAd","SingleEpithelialCellSize","BareNu","BlandCh","NormalNu","Mitoses","Class")
+
+#View(bc)
+dim(bc)
+summary(bc)
+
+#removing ID
+bc<-as.data.frame(bc[,-1])
+cat("Removing the variable BareNu due to missing values; we can also impute missing or use na.omit")
+bc<-as.data.frame(bc[,-6])
+#View(bc)
+cat("Changing the response variable into binomial")
+bc$Class<-ifelse(bc$Class=='benign',0,1)
+#full model
+full<-glm(Class~.,data=bc,family=binomial())
+summary(full)
+
+cat("stepwise selection")
+null=glm(Class~1,data=bc,family=binomial())
+
+step_model=step(null, scope =list(lower=null, upper=full),direction = "both")
+cat("Class ~ clumpthinkness + BlandCh + MarAd + cellshape + Mitoses + NormalNu is the best model")
+
+set.seed(24688)
+cat("Divide the dataset into two sets")
+index_num <- sample(dim(bc)[1], size = 350)
+train <- bc[index_num,]
+test <- bc[-index_num,]
+
+cat("glm")
+best_model_glm = glm(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train ,family = binomial())
+vsa.glm <- (mean((ifelse(predict(best_model_glm, test, type = "response")>=.5,1,0)-test$Class)^2))
+vsa.glm*100
+
+cat("lda")
+best_model_lda = lda(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu, data = train)
+Auto_pred = predict(best_model_lda, test)
+vsa.lda <- mean(Auto_pred$class != test$Class)
+vsa.lda
+
+cat("qda")
+best_model_qda = qda(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu, data = train)
+Auto_pred_1 = predict(best_model_qda, test)
+vsa.qda <- mean(Auto_pred_1$class != test$Class)
+vsa.qda
+
+cat("knn")
+best_model_knn = knn(train, test, train$Class, k = 1)
+table(best_model_knn, test$Class )
+vsa.knn <- mean(best_model_knn != test$Class)
+vsa.knn
+
+cat("mclust")
+model1.mclust <- MclustDA(train, train$Class, G = 1)
+model2.mclust <- MclustDA(train, train$Class, G = 2)
+model3.mclust <- MclustDA(train, train$Class, G = 3)
+model4.mclust <- MclustDA(train, train$Class, G = 4)
+model5.mclust <- MclustDA(train, train$Class, G = 5)
+
+#BIC_for_mclust <- c(model1.mclust$bic, model2.mclust$bic, model3.mclust$bic, model4.mclust$bic , model5.mclust$bic)
+#BIC_for_mclust
+
+results.1 = cbind(paste(predict.MclustDA(model1.mclust, newdata = test[, -9])$classification), paste(test[, 9]))
+results.2 = cbind(paste(predict.MclustDA(model2.mclust, newdata = test[, -9])$classification), paste(test[, 9]))
+results.3 = cbind(paste(predict.MclustDA(model3.mclust, newdata = test[, -9])$classification), paste(test[, 9]))
+results.4 = cbind(paste(predict.MclustDA(model4.mclust, newdata = test[, -9])$classification), paste(test[, 9]))
+results.5 = cbind(paste(predict.MclustDA(model5.mclust, newdata = test[, -9])$classification), paste(test[, 9]))
+
+cat("error rate")
+err1 <- mean(results.1[, 1] != results.1[, 2])
+err2 <- mean(results.2[, 1] != results.2[, 2])
+err3 <- mean(results.3[, 1] != results.3[, 2])
+err4 <- mean(results.4[, 1] != results.4[, 2])
+err5 <- mean(results.5[, 1] != results.5[, 2])
+
+cat("best mclust chosen by BIC")
+vsa.mcl.2<-mean(results.2[, 1] != results.2[, 2])
+vsa.mcl.2
+cat("Mclust EDDA")
+model.EDDA <- MclustDA(train[, -9], train[, 9], modelType = "EDDA")
+summary(model.EDDA)
+
+results.EDDA = cbind(paste(predict.MclustDA(model.EDDA, newdata = test[, -9])$classification), paste(test[, 9]))
+vsa.edda <- mean(results.EDDA[, 1] != results.EDDA[, 2])
+vsa.edda
+cat("rpart")
+tree_fit <- rpart(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train)
+vsa.rpart <- (mean((ifelse(predict(tree_fit, test)>=.5,1,0)-test$Class)^2))
+vsa.rpart
+
+cat("LOOCV")
+cnt = rep(0, dim(bc)[1])
+for (i in 1:(dim(bc)[1])) {
+  best_glm <- glm(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train ,family = binomial())
+  prob = ifelse(predict(best_glm, bc[i,], type = "response")>=.5,1,0)
+  if (prob != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.glm <- sum(cnt)/dim(bc)[1]
+loocv.glm*100
+
+for (i in 1:(dim(bc)[1])) {
+  best_model_lda = lda(Class ~  Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=bc[-i,])
+  Auto_pred = predict(best_model_lda, bc[i,])
+  if (Auto_pred$class != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.lda <- sum(cnt)/dim(bc)[1]
+loocv.lda
+
+for (i in 1:(dim(bc)[1])) {
+  best_model_qda = qda(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=bc[-i,])
+  Auto_pred = predict(best_model_qda, bc[i,])
+  if (Auto_pred$class != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.qda <- sum(cnt)/dim(bc)[1]
+loocv.qda*100
+
+for (i in 1:(dim(bc)[1])) {
+  knn_fit_10 = knn(bc[-i,], bc[i,], bc$Class[-i], k = 10)
+  if (knn_fit_10 != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.knn <- sum(cnt)/dim(bc)[1]
+loocv.knn
+
+for (i in 1:(dim(bc)[1])) {
+  model2.mclust <- MclustDA(bc[-i,], bc$Class[-i], G = 2)
+  mpred<-predict.MclustDA(model2.mclust, newdata = bc[i,])$classification
+  if (mpred != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.mcl.2 <- sum(cnt)/dim(bc)[1]
+loocv.mcl.2
+
+for (i in 1:(dim(bc)[1])) {
+  model.EDDA <- MclustDA(bc[-i,], bc$Class[-i], modelType = "EDDA")
+  mpred<-predict.MclustDA(model.EDDA, newdata = bc[i,])$classification
+  if (mpred != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.edda <- sum(cnt)/dim(bc)[1]
+loocv.edda
+
+for (i in 1:(dim(bc)[1])) {
+  best_tree=rpart(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train)
+  prob = ifelse(predict(best_tree, bc[i,])>=.5,1,0)
+  if (prob != bc$Class[i]) 
+    cnt[i] = 1
+}
+loocv.rpart <- sum(cnt)/dim(bc)[1]
+loocv.rpart
+
+cat("5 fold")
+begin <- 1
+fitted<-NULL
+glm.error<-NULL
+lda.error<-NULL
+qda.error<-NULL
+knn.error<-NULL
+mcl.error<-NULL
+edda.error<-NULL
+rpart.error<-NULL
+for(i in 1:5) {
+  begin <- (i-1)*nrow(bc)/5
+  end <-(i)*nrow(bc)/5
+  train <- bc[-(begin:end),]
+  test <- bc[begin:end,]
+  
+  best_model_glm=glm(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train,family=binomial())
+  fitted <- ifelse(predict(best_model_glm, test, type = "response")>=.5,1,0)
+  glm.error[i]<-sum((test$Class-fitted)^2)/dim(test)[1]
+  
+  best_model_lda = lda(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu , data = train)
+  Auto_pred = predict(best_model_lda, test)
+  lda.error[i]<-mean(Auto_pred$class != test$Class)
+  
+  best_model_qda = qda(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu , data = train)
+  Auto_pred1 = predict(best_model_qda, test)
+  qda.error[i]<-mean(Auto_pred1$class != test$Class)
+  
+  knn_fit_10 = knn(train, test, train$Class, k = 10)
+  table(knn_fit_10, test$Class )
+  knn.error[i]<-mean(knn_fit_10 != test$Class)
+  
+  model2.mclust <- MclustDA(train, train$Class, G = 2)
+  mpred<-predict.MclustDA(model4.mclust, newdata = test)$classification
+  mcl.error[i]<-mean(mpred != test$Class)
+  
+  model.EDDA <- MclustDA(train, train$Class, modelType = "EDDA")
+  eddapred<-predict.MclustDA(model.EDDA, newdata = test)$classification
+  edda.error[i]<-mean(eddapred != test$Class)
+  
+  model.rpart<- rpart(Class ~ Clumpthinkness + BlandCh + MarAd + `Cellshape ` + Mitoses + NormalNu ,data=train)
+  rpart.error[i] <- (mean((ifelse(predict(tree_fit, test)>=.5,1,0)-test$Class)^2))
+}
+fold5.glm<-mean(glm.error)
+fold5.lda<-mean(lda.error)
+fold5.qda<-mean(qda.error)
+fold5.knn<-mean(knn.error)
+fold5.mcl.2<-mean(mcl.error)
+fold5.edda<-mean(edda.error)
+fold5.rpart<-mean(rpart.error)
+
+glm.tot<-cbind(vsa.glm,loocv.glm,fold5.glm)
+lda.tot<-cbind(vsa.lda,loocv.lda,fold5.lda)
+qda.tot<-cbind(vsa.qda,loocv.qda,fold5.qda)
+knn.tot<-cbind(vsa.knn,loocv.knn,fold5.knn)
+mcl.tot<-cbind(vsa.mcl.2,loocv.mcl.2,fold5.mcl.2)
+edda.tot<-cbind(vsa.edda,loocv.edda,fold5.edda)
+rpart.tot<-cbind(vsa.rpart,loocv.rpart,fold5.rpart)
+
+result.table<-rbind(glm.tot,lda.tot,qda.tot,knn.tot,mcl.tot,edda.tot,rpart.tot)
+colnames(result.table)<-c("VSA","LOOCV","5-FOLD CV")
+rownames(result.table)<-c("GLM","LDA","QDA","KNN","MCLUST","M.EDDA","RPART")
+result.table
+```
+
+
+```{r}
+library(knitr)
+library(kableExtra)
+
+Method <- c("GLM","LDA","QDA","KNN","MclustDA","MclustDA.EDDA","RPART")
+VSA <- c(vsa.glm,vsa.lda,vsa.qda,vsa.knn,vsa.mcl.2,vsa.edda,vsa.rpart)
+LOOCV <- c(loocv.glm,loocv.lda,loocv.qda,loocv.knn,loocv.mcl.2,loocv.edda,loocv.rpart)
+Five.FoldCV <- c(fold5.glm,fold5.lda,fold5.qda,fold5.knn,fold5.mcl.2,fold5.edda,fold5.rpart)
+#Test_error <- c(m1,m2,m3)
+temp <- as.data.frame(cbind(Method,VSA,LOOCV,Five.FoldCV))
+kable(temp, align="r")
+```
